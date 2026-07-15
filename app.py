@@ -165,6 +165,21 @@ def create_app(config=None):
     def admin_page():
         return serve_page("admin.html")
 
+    @app.after_request
+    def security_headers(resp):
+        # Helmet equivalent for Flask (spec: security headers)
+        resp.headers["X-Content-Type-Options"] = "nosniff"
+        resp.headers["X-Frame-Options"] = "DENY"
+        resp.headers["Referrer-Policy"] = "no-referrer"
+        resp.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; "
+            "connect-src 'self'"
+        )
+        return resp
+
     return app
 
 
