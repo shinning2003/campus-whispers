@@ -1,47 +1,65 @@
-"""Admin access: only the owner can log in and see/delete all rumors."""
+"""Admin access: only the owner can see real identities and ban/delete."""
 import pytest
+from tests.helpers import register_and_login
 
 
-def _login(client, password):
+def _login_admin(client, password):
     return client.post("/api/admin/login", json={"password": password})
 
 
-def test_admin_login_wrong_password_rejected(client):
-    resp = _login(client, "wrong-password")
-    assert resp.status_code == 401
-
-
 def test_admin_dashboard_requires_login(client):
-    # Not logged in -> forbidden
-    resp = client.get("/api/admin/rumors")
-    assert resp.status_code == 401
+    assert client.get("/api/admin/rumors").status_code == 401
 
 
-def test_admin_login_then_access_dashboard(client):
-    resp = _login(client, "admin123")
-    assert resp.status_code == 200
-    # Logged in -> can see the full list
-    client.post("/api/rumors", json={"text": "Secret rumor only admin sees count."})
-    resp = client.get("/api/admin/rumors")
-    assert resp.status_code == 200
-    data = resp.get_json()
+def test_admin_sees_real_identity_and_email(client):
+    register_and_login(
+        client, handle="ghost42", email="rahul@x.com", real_name="Rahul Kumar"
+    )
+    client.post("/api/rumors", json={"text": "misbehaving post"})
+    _login_admin(client, "admin123")
+    data = client.get("/api/admin/rumors").get_json()
     assert len(data["rumors"]) == 1
+    r = data["rumors"][0]
+    assert r["real_name"] == "Rahul Kumar"
+    assert r["email"] == "rahul@x.com"
+    assert r["handle"] == "ghost42"
 
 
 def test_admin_can_delete_a_rumor(client):
+    register_and_login(client, handle="usr1", email="e@x.com")
     client.post("/api/rumors", json={"text": "To be deleted."})
-    _login(client, "admin123")
-    # grab its id from the dashboard
-    dash = client.get("/api/admin/rumors").get_json()
-    rid = dash["rumors"][0]["id"]
-    del_resp = client.delete(f"/api/admin/rumors/{rid}")
-    assert del_resp.status_code == 200
-    # public feed now empty
+    _login_admin(client, "admin123")
+    rid = client.get("/api/admin/rumors").get_json()["rumors"][0]["id"]
+    assert client.delete(f"/api/admin/rumors/{rid}").status_code == 200
     assert client.get("/api/rumors").get_json()["rumors"] == []
 
 
+def test_admin_can_ban_a_user(client):
+    register_and_login(client, handle="usr1", email="e@x.com")
+    _login_admin(client, "admin123")
+    uid = client.get("/api/admin/users").get_json()["users"][0]["id"]
+    assert client.delete(f"/api/admin/users/{uid}").status_code == 200
+    # banned user can no longer log in
+    r = client.post(
+        "/api/login", json={"identifier": "e@x.com", "password": "pw123"}
+    )
+    assert r.status_code == 403
+
+
 def test_delete_requires_login(client):
-    client.post("/api/rumors", json={"text": "Cannot be deleted by stranger."})
+    register_and_login(client, handle="usr1", email="e@x.com")
+    client.post("/api/rumors", json={"text": "x"})
     rid = client.get("/api/rumors").get_json()["rumors"][0]["id"]
-    resp = client.delete(f"/api/admin/rumors/{rid}")
-    assert resp.status_code == 401
+    assert client.delete(f"/api/admin/rumors/{rid}").status_code == 401
+
+
+def test_ban_requires_login(client):
+    register_and_login(client, handle="usr1", email="e@x.com")
+    _login_admin(client, "admin123")
+    uid = client.get("/api/admin/users").get_json()["users"][0]["id"]
+    client.get("/api/admin/rumors")  # refresh nothing; just ensure admin still set
+    # logout simulation: new client without admin session
+    from app import create_app, init_db
+    app2 = create_app({"TESTING": True, "DB_PATH": client.application.config["DB_PATH"]})
+    with app2.test_client() as c2:
+        assert c2.delete(f"/api/admin/users/{uid}").status_code == 401

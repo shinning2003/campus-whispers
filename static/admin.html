@@ -9,12 +9,12 @@
     * { box-sizing: border-box; }
     body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
            background: var(--bg); color: var(--text); min-height:100vh; }
-    header { text-align:center; padding: 36px 16px 8px; }
+    header { text-align:center; padding: 32px 16px 8px; }
     h1 { margin:0; }
     .sub { color: var(--muted); font-size:.85rem; margin-top:6px; }
-    .wrap { max-width: 720px; margin: 0 auto; padding: 0 16px 60px; }
+    .wrap { max-width: 820px; margin: 0 auto; padding: 0 16px 60px; }
     .card { background: var(--card); border-radius: 14px; padding: 18px; margin: 16px 0; }
-    input { width:100%; padding: 12px; border-radius: 10px; border:1px solid #2c3361;
+    input { width:100%; padding: 11px; border-radius: 10px; border:1px solid #2c3361;
             background:#12152e; color: var(--text); font-size:1rem; }
     button { margin-top: 12px; background: var(--accent); color:#fff; border:0;
              padding: 10px 18px; border-radius: 10px; font-size:1rem; cursor:pointer; }
@@ -24,16 +24,21 @@
              display:flex; justify-content: space-between; align-items:flex-start; gap:12px; }
     .rumor .body { flex:1; }
     .rumor .meta { color: var(--muted); font-size:.75rem; margin-top:6px; }
+    .id { color:#ff9db1; }
     .del { background:#3a2030; color:#ff8da3; border:1px solid #5a2c40; padding:6px 12px; }
-    .del:hover { background:#4a2436; }
+    .ban { background:#3a2030; color:#ff8da3; border:1px solid #5a2c40; padding:6px 12px; }
+    .del:hover, .ban:hover { background:#4a2436; }
     .hidden { display:none; }
+    .tabs { text-align:center; margin:10px 0; }
+    .tab { color: var(--muted); cursor:pointer; margin:0 8px; }
+    .tab.active { color: var(--text); font-weight:600; }
     a { color: var(--muted); }
   </style>
 </head>
 <body>
   <header>
     <h1>Campus Whispers — Admin</h1>
-    <div class="sub">Only you can see this. Stored on your server.</div>
+    <div class="sub">You see real names & emails. Ban anyone who misbehaves.</div>
   </header>
   <div class="wrap">
     <div class="card" id="loginCard">
@@ -43,48 +48,66 @@
     </div>
 
     <div class="card hidden" id="dashCard">
+      <div class="tabs">
+        <span class="tab active" id="tabRumors">Rumors</span>
+        <span class="tab" id="tabUsers">Users</span>
+      </div>
       <div id="list"></div>
+      <div id="userList" class="hidden"></div>
       <a href="/">← Back to public board</a>
     </div>
   </div>
 
   <script>
-    const loginCard = document.getElementById('loginCard');
-    const dashCard = document.getElementById('dashCard');
-    const listEl = document.getElementById('list');
+    const $ = id => document.getElementById(id);
+    const api = (m,u,b)=>fetch(u,{method:m,headers:{'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined});
+    function esc(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 
-    document.getElementById('login').onclick = async () => {
-      const r = await fetch('/api/admin/login', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ password: document.getElementById('pw').value })
-      });
-      if (r.ok) { loginCard.classList.add('hidden'); dashCard.classList.remove('hidden'); load(); }
-      else document.getElementById('loginMsg').textContent = 'Wrong password.';
+    $('login').onclick = async () => {
+      const r = await api('POST','/api/admin/login',{password:$('pw').value});
+      if (r.ok){ $('loginCard').classList.add('hidden'); $('dashCard').classList.remove('hidden'); loadRumors(); loadUsers(); }
+      else $('loginMsg').textContent = 'Wrong password.';
     };
 
-    async function load() {
-      const r = await fetch('/api/admin/rumors');
+    $('tabRumors').onclick = () => { $('tabRumors').classList.add('active'); $('tabUsers').classList.remove('active'); $('list').classList.remove('hidden'); $('userList').classList.add('hidden'); };
+    $('tabUsers').onclick = () => { $('tabUsers').classList.add('active'); $('tabRumors').classList.remove('active'); $('userList').classList.remove('hidden'); $('list').classList.add('hidden'); };
+
+    async function loadRumors() {
+      const r = await api('GET','/api/admin/rumors');
       const data = await r.json();
-      listEl.innerHTML = '';
-      if (!data.rumors || !data.rumors.length) {
-        listEl.innerHTML = '<p class="msg">No whispers stored yet.</p>'; return;
-      }
+      $('list').innerHTML = '';
+      if (!data.rumors || !data.rumors.length) { $('list').innerHTML='<p class="msg">No whispers stored.</p>'; return; }
       for (const x of data.rumors) {
-        const div = document.createElement('div');
-        div.className = 'rumor';
-        div.innerHTML = `<div class="body"><div>${escapeHtml(x.text)}</div>
-          <div class="meta">#${x.id} · ${new Date(x.created_at).toLocaleString()}</div></div>`;
-        const b = document.createElement('button');
-        b.className = 'del'; b.textContent = 'Delete';
-        b.onclick = async () => {
-          await fetch('/api/admin/rumors/' + x.id, { method:'DELETE' });
-          load();
-        };
-        div.appendChild(b);
-        listEl.appendChild(div);
+        const d = document.createElement('div'); d.className='rumor';
+        d.innerHTML = `<div class="body">
+          <div>${esc(x.text)}</div>
+          <div class="meta">#${x.id} · <span class="handle">@${esc(x.handle)}</span> ·
+            <span class="id">${esc(x.real_name)} &lt;${esc(x.email)}&gt;</span> ·
+            ${new Date(x.created_at).toLocaleString()}</div></div>`;
+        const b=document.createElement('button'); b.className='del'; b.textContent='Delete';
+        b.onclick=async()=>{ await api('DELETE','/api/admin/rumors/'+x.id); loadRumors(); };
+        d.appendChild(b); $('list').appendChild(d);
       }
     }
-    function escapeHtml(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+    async function loadUsers() {
+      const r = await api('GET','/api/admin/users');
+      const data = await r.json();
+      $('userList').innerHTML='';
+      if (!data.users || !data.users.length) { $('userList').innerHTML='<p class="msg">No users.</p>'; return; }
+      for (const u of data.users) {
+        const d=document.createElement('div'); d.className='rumor';
+        d.innerHTML=`<div class="body"><div><span class="handle">@${esc(u.handle)}</span>
+          ${u.banned?'<span class="id">[BANNED]</span>':''}</div>
+          <div class="meta"><span class="id">${esc(u.real_name)} &lt;${esc(u.email)}&gt;</span></div></div>`;
+        if (!u.banned) {
+          const b=document.createElement('button'); b.className='ban'; b.textContent='Ban & remove';
+          b.onclick=async()=>{ if(confirm('Ban '+u.real_name+'? All their posts will be deleted.')){ await api('DELETE','/api/admin/users/'+u.id); loadUsers(); loadRumors(); } };
+          d.appendChild(b);
+        }
+        $('userList').appendChild(d);
+      }
+    }
   </script>
 </body>
 </html>

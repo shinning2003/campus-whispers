@@ -9,14 +9,16 @@
     * { box-sizing: border-box; }
     body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
            background: var(--bg); color: var(--text); min-height:100vh; }
-    header { text-align:center; padding: 36px 16px 12px; }
-    h1 { margin:0; font-size: 2rem; letter-spacing: .5px; }
+    header { text-align:center; padding: 32px 16px 8px; }
+    h1 { margin:0; font-size: 2rem; }
     .sub { color: var(--muted); margin-top: 6px; font-size: .9rem; }
     .wrap { max-width: 680px; margin: 0 auto; padding: 0 16px 60px; }
-    .composer { background: var(--card); border-radius: 14px; padding: 16px; margin: 18px 0; }
+    .card { background: var(--card); border-radius: 14px; padding: 18px; margin: 16px 0; }
+    input { width:100%; padding: 11px; border-radius: 10px; border:1px solid #2c3361;
+            background:#12152e; color: var(--text); font-size:1rem; margin-top:8px; }
     textarea { width:100%; min-height: 90px; resize: vertical; border-radius: 10px;
                border:1px solid #2c3361; background:#12152e; color: var(--text);
-               padding: 12px; font-size: 1rem; }
+               padding: 12px; font-size: 1rem; margin-top:8px; }
     button { margin-top: 12px; background: var(--accent); color:#fff; border:0;
              padding: 10px 18px; border-radius: 10px; font-size:1rem; cursor:pointer; }
     button:hover { filter: brightness(1.08); }
@@ -24,71 +26,122 @@
     .rumor { background: var(--card); border-radius: 12px; padding: 14px 16px; margin: 12px 0;
              border-left: 3px solid var(--accent); }
     .rumor .meta { color: var(--muted); font-size:.75rem; margin-top:8px; }
-    .anon-tag { font-size:.7rem; background:#2c3361; color:var(--muted);
-                padding:2px 8px; border-radius: 999px; }
-    .admin-link { display:block; text-align:center; margin-top: 30px; color: var(--muted); font-size:.8rem; }
+    .handle { font-weight:600; color: var(--accent); }
+    .topbar { text-align:right; font-size:.85rem; color: var(--muted); }
     a { color: var(--muted); }
+    .hidden { display:none; }
   </style>
 </head>
 <body>
   <header>
     <h1>Campus Whispers</h1>
-    <div class="sub">Say it anonymously. No names, no accounts. &nbsp;<span class="anon-tag">100% anonymous</span></div>
+    <div class="sub">Post under a handle. Only the admin can see who you really are.</div>
   </header>
   <div class="wrap">
-    <div class="composer">
+    <div class="topbar" id="topbar"></div>
+
+    <!-- Register -->
+    <div class="card" id="registerCard">
+      <strong>First time? Create your account</strong>
+      <input id="real_name" placeholder="Real name (admin only sees this)" />
+      <input id="email" placeholder="Email" />
+      <input id="handle" placeholder="Public handle (e.g. ghost42)" />
+      <input id="reg_pw" type="password" placeholder="Password" />
+      <button id="register">Register</button>
+      <div class="msg" id="regMsg"></div>
+    </div>
+
+    <!-- Login -->
+    <div class="card hidden" id="loginCard">
+      <strong>Log in to post</strong>
+      <input id="identifier" placeholder="Handle or email" />
+      <input id="login_pw" type="password" placeholder="Password" />
+      <button id="login">Login</button>
+      <div class="msg" id="loginMsg"></div>
+    </div>
+
+    <!-- Compose -->
+    <div class="card hidden" id="composeCard">
+      <span id="who"></span>
       <textarea id="text" placeholder="Whisper something about class..." maxlength="500"></textarea>
       <button id="post">Whisper</button>
       <div class="msg" id="msg"></div>
     </div>
+
     <div id="feed"></div>
-    <a class="admin-link" href="/admin">Admin</a>
+    <a href="/admin" style="display:block;text-align:center;margin-top:24px;">Admin</a>
   </div>
 
   <script>
-    const feed = document.getElementById('feed');
-    const msg = document.getElementById('msg');
+    const $ = id => document.getElementById(id);
+    const api = (method, url, body) => fetch(url, {
+      method, headers: {'Content-Type':'application/json'},
+      body: body ? JSON.stringify(body) : undefined
+    });
+
+    function showState() {
+      const logged = !!localStorage.getItem('handle');
+      $('registerCard').classList.toggle('hidden', logged);
+      $('loginCard').classList.toggle('hidden', logged);
+      $('composeCard').classList.toggle('hidden', !logged);
+      $('topbar').innerHTML = logged
+        ? `Logged in as <span class="handle">${localStorage.getItem('handle')}</span> · <a href="#" id="logout">logout</a>`
+        : '';
+      if (logged) $('who').textContent = `Posting as ${localStorage.getItem('handle')}`;
+      if (logged) $('logout').onclick = () => { localStorage.clear(); location.reload(); };
+    }
+
+    function escapeHtml(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 
     async function load() {
-      const r = await fetch('/api/rumors');
+      const r = await api('GET', '/api/rumors');
       const data = await r.json();
-      feed.innerHTML = '';
+      $('feed').innerHTML = '';
       if (!data.rumors.length) {
-        feed.innerHTML = '<p class="msg" style="text-align:center">No whispers yet. Be the first.</p>';
+        $('feed').innerHTML = '<p class="msg" style="text-align:center">No whispers yet. Be the first.</p>';
         return;
       }
       for (const x of data.rumors) {
-        const div = document.createElement('div');
-        div.className = 'rumor';
-        const when = new Date(x.created_at).toLocaleString();
-        div.innerHTML = `<div>${escapeHtml(x.text)}</div>
-          <div class="meta">${when}</div>`;
-        feed.appendChild(div);
+        const d = document.createElement('div');
+        d.className = 'rumor';
+        d.innerHTML = `<div><span class="handle">@${escapeHtml(x.handle)}</span></div>
+          <div style="margin-top:6px">${escapeHtml(x.text)}</div>
+          <div class="meta">${new Date(x.created_at).toLocaleString()}</div>`;
+        $('feed').appendChild(d);
       }
     }
 
-    function escapeHtml(s) {
-      return s.replace(/[&<>"']/g, c => (
-        {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
-      ));
-    }
-
-    document.getElementById('post').onclick = async () => {
-      const text = document.getElementById('text').value.trim();
-      if (!text) { msg.textContent = 'Write something first.'; return; }
-      const r = await fetch('/api/rumors', {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ text })
+    $('register').onclick = async () => {
+      const r = await api('POST', '/api/register', {
+        real_name: $('real_name').value.trim(),
+        email: $('email').value.trim(),
+        handle: $('handle').value.trim(),
+        password: $('reg_pw').value
       });
-      if (r.ok) {
-        document.getElementById('text').value = '';
-        msg.textContent = 'Whispered. 🤫';
-        load();
-      } else {
-        msg.textContent = 'Could not post.';
-      }
+      const j = await r.json();
+      if (r.ok) { $('regMsg').textContent = 'Registered! Now log in.'; $('regMsg').style.color = '#7cff9c'; }
+      else $('regMsg').textContent = j.error;
     };
 
+    $('login').onclick = async () => {
+      const r = await api('POST', '/api/login', {
+        identifier: $('identifier').value.trim(),
+        password: $('login_pw').value
+      });
+      const j = await r.json();
+      if (r.ok) { localStorage.setItem('handle', j.handle); showState(); load(); $('loginMsg').textContent=''; }
+      else $('loginMsg').textContent = j.error;
+    };
+
+    $('post').onclick = async () => {
+      const text = $('text').value.trim();
+      if (!text) { $('msg').textContent = 'Write something first.'; return; }
+      const r = await api('POST', '/api/rumors', { text });
+      if (r.ok) { $('text').value=''; $('msg').textContent='Whispered. 🤫'; load(); }
+      else $('msg').textContent = 'Could not post.';
+    };
+
+    showState();
     load();
   </script>
 </body>
