@@ -7,7 +7,8 @@ import pytest
 from app import create_app, init_db, get_db
 
 
-def test_defaults_to_sqlite_when_no_database_url():
+def test_defaults_to_sqlite_when_no_database_url(monkeypatch):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
     tmp = tempfile.mkdtemp()
     db = os.path.join(tmp, "local.db")
     app = create_app({"TESTING": True, "DB_PATH": db})

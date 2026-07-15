@@ -40,13 +40,13 @@ def create_app(config=None):
         if not re.match(r"^[A-Za-z0-9_]{3,20}$", handle):
             return jsonify({"error": "Handle: 3-20 chars, letters/numbers/_."}), 400
         conn = get_db()
-        if conn.execute("SELECT 1 FROM users WHERE email=?", (email,)).fetchone():
+        if exec(conn, "SELECT 1 FROM users WHERE email=?", (email,)).fetchone():
             conn.close()
             return jsonify({"error": "Email already registered."}), 400
-        if conn.execute("SELECT 1 FROM users WHERE handle=?", (handle,)).fetchone():
+        if exec(conn, "SELECT 1 FROM users WHERE handle=?", (handle,)).fetchone():
             conn.close()
             return jsonify({"error": "Handle taken."}), 400
-        conn.execute(
+        exec(conn, 
             "INSERT INTO users (real_name, email, handle, password_hash) VALUES (?,?,?,?)",
             (real_name, email, handle, generate_password_hash(password)),
         )
@@ -60,7 +60,7 @@ def create_app(config=None):
         identifier = (p.get("identifier") or "").strip().lower()
         password = p.get("password") or ""
         conn = get_db()
-        row = conn.execute(
+        row = exec(conn, 
             "SELECT * FROM users WHERE email=? OR handle=?",
             (identifier, identifier),
         ).fetchone()
@@ -82,13 +82,24 @@ def create_app(config=None):
             return jsonify({"error": "Rumor text is required."}), 400
         created_at = datetime.now(timezone.utc).isoformat()
         conn = get_db()
-        cur = conn.execute(
-            "INSERT INTO rumors (user_id, text, created_at) VALUES (?,?,?)",
-            (session["user_id"], text, created_at),
-        )
-        conn.commit()
-        rid = cur.lastrowid
-        row = conn.execute(
+        import psycopg
+        is_pg = isinstance(conn, psycopg.Connection)
+        if is_pg:
+            cur = exec(conn,
+                "INSERT INTO rumors (user_id, text, created_at) VALUES (?,?,?) "
+                "RETURNING id",
+                (session["user_id"], text, created_at),
+            )
+            conn.commit()
+            rid = cur.fetchone()["id"]
+        else:
+            cur = exec(conn,
+                "INSERT INTO rumors (user_id, text, created_at) VALUES (?,?,?)",
+                (session["user_id"], text, created_at),
+            )
+            conn.commit()
+            rid = cur.lastrowid
+        row = exec(conn,
             "SELECT r.id, r.text, r.created_at, u.handle FROM rumors r "
             "JOIN users u ON u.id = r.user_id WHERE r.id = ?", (rid,)
         ).fetchone()
@@ -98,7 +109,7 @@ def create_app(config=None):
     @app.get("/api/rumors")
     def list_rumors():
         conn = get_db()
-        rows = conn.execute(
+        rows = exec(conn, 
             "SELECT r.id, r.text, r.created_at, u.handle FROM rumors r "
             "JOIN users u ON u.id = r.user_id "
             "WHERE u.banned = 0 ORDER BY r.id DESC"
@@ -119,7 +130,7 @@ def create_app(config=None):
         if not session.get("admin"):
             return jsonify({"error": "Unauthorized."}), 401
         conn = get_db()
-        rows = conn.execute(
+        rows = exec(conn, 
             "SELECT r.id, r.text, r.created_at, u.handle, u.real_name, u.email "
             "FROM rumors r JOIN users u ON u.id = r.user_id ORDER BY r.id DESC"
         ).fetchall()
@@ -131,7 +142,7 @@ def create_app(config=None):
         if not session.get("admin"):
             return jsonify({"error": "Unauthorized."}), 401
         conn = get_db()
-        conn.execute("DELETE FROM rumors WHERE id=?", (rid,))
+        exec(conn, "DELETE FROM rumors WHERE id=?", (rid,))
         conn.commit()
         conn.close()
         return jsonify({"ok": True, "deleted": rid})
@@ -141,7 +152,7 @@ def create_app(config=None):
         if not session.get("admin"):
             return jsonify({"error": "Unauthorized."}), 401
         conn = get_db()
-        rows = conn.execute(
+        rows = exec(conn, 
             "SELECT id, real_name, email, handle, banned FROM users ORDER BY id"
         ).fetchall()
         conn.close()
@@ -152,8 +163,8 @@ def create_app(config=None):
         if not session.get("admin"):
             return jsonify({"error": "Unauthorized."}), 401
         conn = get_db()
-        conn.execute("UPDATE users SET banned = 1 WHERE id=?", (uid,))
-        conn.execute("DELETE FROM rumors WHERE user_id=?", (uid,))
+        exec(conn, "UPDATE users SET banned = 1 WHERE id=?", (uid,))
+        exec(conn, "DELETE FROM rumors WHERE user_id=?", (uid,))
         conn.commit()
         conn.close()
         return jsonify({"ok": True, "banned": uid})
@@ -224,6 +235,14 @@ def get_db(db_path=None):
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     return conn
+
+
+def exec(conn, sql, params=()):
+    """Run a query, transparently adapting `?` placeholders to `%s` for Postgres."""
+    import psycopg
+    if isinstance(conn, psycopg.Connection):
+        sql = sql.replace("?", "%s")
+    return conn.execute(sql, params)
 
 
 def init_db(db_path=None):

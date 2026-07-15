@@ -44,15 +44,16 @@ def test_register_rejects_missing_fields(client):
 
 def test_password_not_stored_in_plaintext(client):
     register(client)
-    db = client.application.config["DB_PATH"]
-    conn = sqlite3.connect(db)
-    row = conn.execute(
-        "SELECT password_hash FROM users WHERE email='rahul@x.com'"
-    ).fetchone()
-    conn.close()
+    from app import get_db
+    with client.application.app_context():
+        conn = get_db()
+        row = conn.execute(
+            "SELECT password_hash FROM users WHERE email='rahul@x.com'"
+        ).fetchone()
+        conn.close()
     assert row is not None
-    assert row[0] != "pw123"          # not plaintext
-    assert len(row[0]) > 20           # salted hash
+    assert row["password_hash"] != "pw123"      # not plaintext
+    assert len(row["password_hash"]) > 20        # salted hash
 
 
 def test_login_correct_password(client):
