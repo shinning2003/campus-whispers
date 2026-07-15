@@ -186,8 +186,10 @@ def serve_page(name):
 
 
 def get_db(db_path):
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, timeout=30)
     conn.row_factory = sqlite3.Row
+    # WAL lets readers and writers coexist without "database is locked"
+    conn.execute("PRAGMA journal_mode=WAL")
     return conn
 
 
