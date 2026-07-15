@@ -1,0 +1,17 @@
+# Render deploy config — free web service + (optional) managed Postgres.
+# We use an EXTERNAL Supabase Postgres (free, no expiry) via DATABASE_URL.
+services:
+  - type: web
+    name: campus-whispers
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:create_app\(\) --bind 0.0.0.0:$PORT
+    healthCheckPath: /
+    envVars:
+      - key: DATABASE_URL
+        sync: false          # paste your Supabase connection string in Render dashboard
+      - key: ADMIN_PASSWORD
+        sync: false          # set a strong admin password in Render dashboard
+      - key: SECRET_KEY
+        generateValue: true

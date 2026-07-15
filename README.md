@@ -41,20 +41,52 @@ venv\Scripts\python run.py
 venv\Scripts\python -m pytest -q
 ```
 
-Covers: anonymous posting, empty-post rejection, public feed (no author
-leak), admin login + wrong-password rejection, admin-only dashboard,
-delete-requires-login, and page routes.
+Covers: register/login, password hashing, handle-only public feed,
+admin identity reveal, ban, security headers, semantic HTML, and the
+pluggable DB layer (SQLite local / Postgres in prod).
 
-## Deploy (so classmates anywhere can use it)
+## Deploy: Render (free web) + Supabase Postgres (free, no expiry)
 
-Push to GitHub and deploy on **Render** (Free) as a Python web service:
-- Build: `pip install flask`
-- Start: `python run.py`
-- Set `ADMIN_PASSWORD`, `SECRET_KEY`, and `PORT` (Render gives this) as env vars.
+**Why this combo:** Netlify only hosts static sites — it can't run this
+Flask backend or a database. Render runs the backend free (sleeps when
+idle). SQLite is **not** viable on Render (ephemeral filesystem wipes it),
+so we use an external **Supabase Postgres** (free 500 MB, permanent).
+
+### 1. Create a free Supabase project
+- Go to https://supabase.com → New project (free tier).
+- Wait for it to provision. Open **Project Settings → Database**.
+- Copy the **URI** (looks like
+  `postgresql://postgres:<password>@db.<id>.supabase.co:5432/postgres`).
+- The app creates the `users` / `rumors` tables automatically on first run.
+
+### 2. Push to GitHub
+- Create a repo (e.g. `campus-whispers`).
+- `git remote add origin <your-repo-url> && git push -u origin main`
+
+### 3. Deploy on Render
+- https://render.com → **New → Web Service** → connect the GitHub repo.
+- Render auto-detects `render.yaml`. Otherwise set:
+  - Build: `pip install -r requirements.txt`
+  - Start: `gunicorn "app:create_app()" --bind 0.0.0.0:$PORT`
+- In **Environment**, add:
+  - `DATABASE_URL` = your Supabase URI (from step 1)
+  - `ADMIN_PASSWORD` = a strong password (you'll use it at `/admin`)
+  - `SECRET_KEY` = any long random string
+- Deploy. Render gives you a `https://campus-whispers.onrender.com` URL.
+  The TLS cert (HTTPS) is automatic — satisfies the spec's encryption req.
+
+### 4. Verify
+- Open the URL → register a test account → post.
+- `/admin` → log in with `ADMIN_PASSWORD` → see real names, ban users.
+
+## Local dev vs prod
+- **Local:** `run.py` uses SQLite (`campus_whispers.db`). No setup needed.
+- **Prod:** if `DATABASE_URL` is set, the app transparently uses Postgres.
+  Same code, no branching in routes.
 
 ## Important
 
 This is for your class's fun/community use. Because posts name real people:
 - You (admin) can delete anything — use it.
 - Don't use it for bullying, threats, or defamation. Keep it light.
-- The delete capability exists precisely so you can pull anything harmful.
+- The ban capability exists precisely so you can pull anything harmful.

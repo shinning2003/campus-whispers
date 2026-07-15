@@ -9,7 +9,7 @@ import re
 import sqlite3
 from datetime import datetime, timezone
 
-from flask import Flask, jsonify, request, session
+from flask import Flask, jsonify, request, session, current_app
 from werkzeug.security import generate_password_hash, check_password_hash
 
 
@@ -17,6 +17,7 @@ def create_app(config=None):
     app = Flask(__name__)
     app.config.from_mapping(
         DB_PATH=os.environ.get("DB_PATH", "campus_whispers.db"),
+        DATABASE_URL=os.environ.get("DATABASE_URL"),
         ADMIN_PASSWORD=os.environ.get("ADMIN_PASSWORD", "admin123"),
         SECRET_KEY=os.environ.get("SECRET_KEY", "dev-secret-change-me"),
     )
@@ -38,7 +39,7 @@ def create_app(config=None):
             return jsonify({"error": "Password too short (min 4)."}), 400
         if not re.match(r"^[A-Za-z0-9_]{3,20}$", handle):
             return jsonify({"error": "Handle: 3-20 chars, letters/numbers/_."}), 400
-        conn = get_db(app.config["DB_PATH"])
+        conn = get_db()
         if conn.execute("SELECT 1 FROM users WHERE email=?", (email,)).fetchone():
             conn.close()
             return jsonify({"error": "Email already registered."}), 400
@@ -58,7 +59,7 @@ def create_app(config=None):
         p = request.get_json(silent=True) or {}
         identifier = (p.get("identifier") or "").strip().lower()
         password = p.get("password") or ""
-        conn = get_db(app.config["DB_PATH"])
+        conn = get_db()
         row = conn.execute(
             "SELECT * FROM users WHERE email=? OR handle=?",
             (identifier, identifier),
@@ -80,7 +81,7 @@ def create_app(config=None):
         if not text:
             return jsonify({"error": "Rumor text is required."}), 400
         created_at = datetime.now(timezone.utc).isoformat()
-        conn = get_db(app.config["DB_PATH"])
+        conn = get_db()
         cur = conn.execute(
             "INSERT INTO rumors (user_id, text, created_at) VALUES (?,?,?)",
             (session["user_id"], text, created_at),
@@ -96,7 +97,7 @@ def create_app(config=None):
 
     @app.get("/api/rumors")
     def list_rumors():
-        conn = get_db(app.config["DB_PATH"])
+        conn = get_db()
         rows = conn.execute(
             "SELECT r.id, r.text, r.created_at, u.handle FROM rumors r "
             "JOIN users u ON u.id = r.user_id "
@@ -117,7 +118,7 @@ def create_app(config=None):
     def admin_rumors():
         if not session.get("admin"):
             return jsonify({"error": "Unauthorized."}), 401
-        conn = get_db(app.config["DB_PATH"])
+        conn = get_db()
         rows = conn.execute(
             "SELECT r.id, r.text, r.created_at, u.handle, u.real_name, u.email "
             "FROM rumors r JOIN users u ON u.id = r.user_id ORDER BY r.id DESC"
@@ -129,7 +130,7 @@ def create_app(config=None):
     def admin_delete_rumor(rid):
         if not session.get("admin"):
             return jsonify({"error": "Unauthorized."}), 401
-        conn = get_db(app.config["DB_PATH"])
+        conn = get_db()
         conn.execute("DELETE FROM rumors WHERE id=?", (rid,))
         conn.commit()
         conn.close()
@@ -139,7 +140,7 @@ def create_app(config=None):
     def admin_users():
         if not session.get("admin"):
             return jsonify({"error": "Unauthorized."}), 401
-        conn = get_db(app.config["DB_PATH"])
+        conn = get_db()
         rows = conn.execute(
             "SELECT id, real_name, email, handle, banned FROM users ORDER BY id"
         ).fetchall()
@@ -150,7 +151,7 @@ def create_app(config=None):
     def admin_ban_user(uid):
         if not session.get("admin"):
             return jsonify({"error": "Unauthorized."}), 401
-        conn = get_db(app.config["DB_PATH"])
+        conn = get_db()
         conn.execute("UPDATE users SET banned = 1 WHERE id=?", (uid,))
         conn.execute("DELETE FROM rumors WHERE user_id=?", (uid,))
         conn.commit()
@@ -200,35 +201,72 @@ def serve_page(name):
         return f.read()
 
 
-def get_db(db_path):
-    conn = sqlite3.connect(db_path, timeout=30)
+def get_db(db_path=None):
+    """Return a connection to whichever DB is configured.
+
+    If DATABASE_URL (Supabase Postgres) is set, use psycopg; otherwise
+    fall back to the local SQLite file. Both expose a sqlite3.Row-like
+    dict interface via the adapters below.
+    """
+    url = db_path or current_app.config.get("DATABASE_URL")
+    if url:
+        try:
+            import psycopg
+            from psycopg.rows import dict_row
+            conn = psycopg.connect(url, row_factory=dict_row)
+            return conn
+        except ImportError:
+            pass  # psycopg not installed -> fall through to sqlite
+    # SQLite (local dev)
+    conn = sqlite3.connect(
+        current_app.config["DB_PATH"], timeout=30
+    )
     conn.row_factory = sqlite3.Row
-    # WAL lets readers and writers coexist without "database is locked"
     conn.execute("PRAGMA journal_mode=WAL")
     return conn
 
 
-def init_db(db_path):
+def init_db(db_path=None):
     conn = get_db(db_path)
-    conn.execute(
-        """CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            real_name TEXT NOT NULL,
-            email TEXT NOT NULL UNIQUE,
-            handle TEXT NOT NULL UNIQUE,
-            password_hash TEXT NOT NULL,
-            banned INTEGER NOT NULL DEFAULT 0
-        )"""
-    )
-    conn.execute(
-        """CREATE TABLE IF NOT EXISTS rumors (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            text TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            FOREIGN KEY (user_id) REFERENCES users(id)
-        )"""
-    )
+    if isinstance(conn, sqlite3.Connection):
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                real_name TEXT NOT NULL,
+                email TEXT NOT NULL UNIQUE,
+                handle TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                banned INTEGER NOT NULL DEFAULT 0
+            )"""
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS rumors (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                text TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )"""
+        )
+    else:  # Postgres (Supabase)
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                real_name TEXT NOT NULL,
+                email TEXT NOT NULL UNIQUE,
+                handle TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                banned INTEGER NOT NULL DEFAULT 0
+            )"""
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS rumors (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                text TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )"""
+        )
     conn.commit()
     conn.close()
 
