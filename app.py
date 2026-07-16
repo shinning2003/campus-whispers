@@ -30,28 +30,33 @@ def create_app(config=None):
         real_name = (p.get("real_name") or "").strip()
         email = (p.get("email") or "").strip().lower()
         password = p.get("password") or ""
+        # Handle is optional in the UI (privacy). If omitted, auto-generate.
         handle = (p.get("handle") or "").strip()
-        if not (real_name and email and password and handle):
-            return jsonify({"error": "All fields are required."}), 400
+        if not (real_name and email and password):
+            return jsonify({"error": "real_name, email and password required."}), 400
         if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
             return jsonify({"error": "Invalid email."}), 400
         if len(password) < 4:
             return jsonify({"error": "Password too short (min 4)."}), 400
-        if not re.match(r"^[A-Za-z0-9_]{3,20}$", handle):
+        if handle and not re.match(r"^[A-Za-z0-9_]{3,20}$", handle):
             return jsonify({"error": "Handle: 3-20 chars, letters/numbers/_."}), 400
         conn = get_db()
         if exec(conn, "SELECT 1 FROM users WHERE email=?", (email,)).fetchone():
             conn.close()
             return jsonify({"error": "Email already registered."}), 400
-        if exec(conn, "SELECT 1 FROM users WHERE handle=?", (handle,)).fetchone():
+        if handle and exec(conn, "SELECT 1 FROM users WHERE handle=?", (handle,)).fetchone():
             conn.close()
             return jsonify({"error": "Handle taken."}), 400
-        exec(conn, 
+        if not handle:
+            handle = _generate_handle(conn)
+        exec(conn,
             "INSERT INTO users (real_name, email, handle, password_hash) VALUES (?,?,?,?)",
             (real_name, email, handle, generate_password_hash(password)),
         )
         conn.commit()
         conn.close()
+        # Handle is returned for internal/admin use only; the UI must NOT
+        # display it (privacy: a handle ties a person to their posts).
         return jsonify({"ok": True, "handle": handle}), 201
 
     @app.post("/api/login")
@@ -399,6 +404,50 @@ def create_app(config=None):
             return jsonify({"error": "Unauthorized."}), 401
         session["admin"] = True
         return jsonify({"ok": True})
+
+    @app.post("/api/forgot-password")
+    def forgot_password():
+        # Privacy-safe: never confirms whether an email exists. If the email
+        # is registered, the admin is notified so they can reset it manually
+        # (self-service email reset requires SMTP, which is optional).
+        p = request.get_json(silent=True) or {}
+        email = (p.get("email") or "").strip().lower()
+        if not email:
+            return jsonify({"error": "Email required."}), 400
+        conn = get_db()
+        row = exec(conn, "SELECT id, handle FROM users WHERE email=?",
+                   (email,)).fetchone()
+        conn.close()
+        if row:
+            app.logger.info(
+                "Campus Whispers: password-reset requested for user %s (%s)",
+                row["handle"], email)
+        # Always return the same neutral message (no account enumeration).
+        return jsonify({
+            "ok": True,
+            "message": "If that email is registered, the admin has been "
+                       "notified and will reset your password."
+        }), 200
+
+    @app.post("/api/admin/users/<int:uid>/reset-password")
+    def admin_reset_password(uid):
+        if not session.get("admin"):
+            return jsonify({"error": "Unauthorized."}), 401
+        p = request.get_json(silent=True) or {}
+        new_pw = p.get("new_password") or ""
+        if len(new_pw) < 4:
+            return jsonify({"error": "Password too short (min 4)."}), 400
+        conn = get_db()
+        row = exec(conn, "SELECT id FROM users WHERE id=?", (uid,)).fetchone()
+        if not row:
+            conn.close()
+            return jsonify({"error": "User not found."}), 404
+        exec(conn, "UPDATE users SET password_hash=? WHERE id=?",
+             (generate_password_hash(new_pw), uid))
+        conn.commit()
+        conn.close()
+        return jsonify({"ok": True, "reset": uid})
+
 
     @app.post("/api/admin/digest/send")
     def admin_digest_send():
@@ -925,3 +974,15 @@ def init_db(db_path=None):
 
 def hash_password(pw):
     return generate_password_hash(pw)
+
+
+def _generate_handle(conn):
+    """Create a unique random handle (privacy: user doesn't pick/see it)."""
+    import random, string
+    while True:
+        slug = "".join(random.choices(string.ascii_lowercase + string.digits, k=8))
+        handle = f"anon_{slug}"
+        exists = exec(conn, "SELECT 1 FROM users WHERE handle=?",
+                     (handle,)).fetchone()
+        if not exists:
+            return handle

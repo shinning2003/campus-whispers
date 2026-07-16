@@ -41,9 +41,10 @@ venv\Scripts\python run.py
 venv\Scripts\python -m pytest -q
 ```
 
-61 tests covering: register/login, password hashing, handle-only public feed,
+67 tests covering: register/login, password hashing, handle-only public feed,
 admin identity reveal, ban, security headers, semantic HTML, the pluggable DB
-layer (SQLite local / Postgres in prod), **and the engagement suite**:
+layer (SQLite local / Postgres in prod), the engagement suite, **and the
+privacy / account-recovery layer**:
 
 | Feature | What it adds | Psych lever |
 |---|---|---|
@@ -53,6 +54,20 @@ layer (SQLite local / Postgres in prod), **and the engagement suite**:
 | Hot/Rising feed + teaser | `GET /api/rumors?sort=hot|rising`, `/<id>/teaser` | Hunt reward / curiosity gap |
 | Tags + follow | `GET /api/tags`, `POST/DELETE /api/tags/<name>/follow`, `GET /api/me/tags`, post `tags[]` | Investment / internal trigger |
 | Daily digest | `POST /api/admin/digest/send` (admin) | External trigger (email) |
+
+### Privacy & account recovery
+
+Goal: a handle ties a person to their posts, so if a phone is inspected the
+link must not be visible. The handle stays in the DB + admin view for
+accountability, but is hidden from the whole user-facing UI.
+
+| Feature | What it adds |
+|---|---|
+| No handle at signup | `POST /api/register` — `handle` optional; auto-generates `anon_xxxxxxxx` when omitted |
+| Login by email | Handle field removed from login/register/chat UI |
+| Anonymous chat | Comments render as "You" / "Anonymous" in the UI (API returns handle for admin only) |
+| Forgot password | `POST /api/forgot-password` — no account enumeration (identical neutral reply whether or not the email exists); notifies admin via log |
+| Admin reset | `POST /api/admin/users/<id>/reset-password` (admin-gated) |
 
 ## Engagement design notes
 

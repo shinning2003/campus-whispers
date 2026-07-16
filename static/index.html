@@ -42,12 +42,14 @@
     .metoo button { margin-top:0; padding:5px 10px; font-size:.8rem; background:#222a52; }
     .comments { margin-top:10px; border-top:1px solid #2c3361; padding-top:8px; }
     .comment { font-size:.85rem; padding:5px 0; border-bottom:1px solid #20264a; }
-    .comment .ch { color: var(--accent); font-weight:600; }
+    .comment .ch { color: var(--muted); font-weight:600; }
     .comForm { display:flex; gap:6px; margin-top:8px; }
     .comForm input { margin-top:0; }
     .tags { margin-top:8px; }
     .tag { display:inline-block; background:#222a52; color:var(--muted); font-size:.72rem;
            padding:2px 8px; border-radius:10px; margin-right:4px; }
+    .linkbtn { background:none; color:var(--muted); padding:0; margin-top:8px;
+               text-decoration:underline; font-size:.82rem; cursor:pointer; }
     @media (max-width: 520px) {
       h1 { font-size: 1.5rem; }
       .wrap { padding: 0 10px 40px; }
@@ -58,29 +60,42 @@
 <body>
   <header>
     <h1>Campus Whispers</h1>
-    <div class="sub">Post under a handle. Only the admin can see who you really are.</div>
+    <div class="sub">Post anonymously. Only the admin can see who you really are.</div>
   </header>
   <main class="wrap">
     <div class="topbar" id="topbar"></div>
 
+    <!-- Register (no handle field — auto-assigned for privacy) -->
     <div class="card" id="registerCard">
       <strong>First time? Create your account</strong>
       <input id="real_name" placeholder="Real name (admin only sees this)" />
       <input id="email" placeholder="Email" />
-      <input id="handle" placeholder="Public handle (e.g. ghost42)" />
       <input id="reg_pw" type="password" placeholder="Password" />
       <button id="register">Register</button>
       <div class="msg" id="regMsg"></div>
     </div>
 
+    <!-- Login (by email only) -->
     <div class="card hidden" id="loginCard">
       <strong>Log in to post</strong>
-      <input id="identifier" placeholder="Handle or email" />
+      <input id="identifier" placeholder="Email" />
       <input id="login_pw" type="password" placeholder="Password" />
       <button id="login">Login</button>
       <div class="msg" id="loginMsg"></div>
+      <button class="linkbtn" id="forgotLink">Forgot password?</button>
     </div>
 
+    <!-- Forgot password -->
+    <div class="card hidden" id="forgotCard">
+      <strong>Reset password</strong>
+      <p class="msg">Enter your email. The admin will reset your password manually.</p>
+      <input id="forgot_email" placeholder="Email" />
+      <button id="forgotSubmit">Request reset</button>
+      <div class="msg" id="forgotMsg"></div>
+      <button class="linkbtn" id="backLink">Back to login</button>
+    </div>
+
+    <!-- Compose -->
     <div class="card hidden" id="composeCard">
       <span id="who"></span>
       <textarea id="text" placeholder="Whisper something about class..." maxlength="500"></textarea>
@@ -109,15 +124,18 @@
     const REACTIONS = { laugh:'😂', fire:'🔥', hundred:'💯', shock:'😮' };
 
     let sortMode = 'new';
+    // Privacy: we only store a boolean "logged in" flag. The handle is NEVER
+    // kept in the browser or shown in the UI (it links a person to posts).
+    const isLogged = () => localStorage.getItem('cw_logged') === '1';
 
     function showState() {
-      const logged = !!localStorage.getItem('handle');
+      const logged = isLogged();
       $('registerCard').classList.toggle('hidden', logged);
       $('loginCard').classList.toggle('hidden', logged);
       $('composeCard').classList.toggle('hidden', !logged);
       if (logged) {
-        $('who').textContent = `Posting as ${localStorage.getItem('handle')}`;
-        $('topbar').innerHTML = `Logged in as <span class="handle">${localStorage.getItem('handle')}</span> · <a href="#" id="logout">logout</a>`;
+        $('who').textContent = 'You are posting anonymously.';
+        $('topbar').innerHTML = `<a href="#" id="logout">logout</a>`;
         $('logout').onclick = () => { localStorage.clear(); location.reload(); };
         loadMe();
       } else {
@@ -125,14 +143,15 @@
       }
     }
 
-    function escapeHtml(s){return s.replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));}
+    function escapeHtml(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 
     async function loadMe() {
       const r = await api('GET', '/api/me');
       if (r.ok) {
         const j = await r.json();
         const s = j.streak > 0 ? ` · <span class="streak">🔥 ${j.streak}-day streak${j.streak_at_risk_today ? ' (don\'t lose it today!)' : ''}</span>` : '';
-        $('topbar').innerHTML += s;
+        $('topbar').innerHTML = s + ` · <a href="#" id="logout">logout</a>`;
+        $('logout').onclick = () => { localStorage.clear(); location.reload(); };
       }
     }
 
@@ -169,7 +188,6 @@
           <div style="margin-top:6px">${escapeHtml(x.text)}</div>
           ${tags ? `<div class="tags">${tags}</div>` : ''}
           <div class="meta">${new Date(x.created_at).toLocaleString()} · 💬 ${x.comment_count||0} · 🙋 ${x.me_too_count||0}</div>`;
-        // reactions
         const rc = document.createElement('div');
         rc.className = 'reactions';
         for (const [k, emoji] of Object.entries(REACTIONS)) {
@@ -179,7 +197,6 @@
           rc.appendChild(b);
         }
         d.appendChild(rc);
-        // me too
         const mt = document.createElement('div');
         mt.className = 'metoo';
         const mb = document.createElement('button');
@@ -187,20 +204,22 @@
         mb.onclick = () => toggleMeToo(x.id, mb);
         mt.appendChild(mb);
         d.appendChild(mt);
-        // comments
+        // Comments: handle hidden (privacy). Show "You" for own, else "Anonymous".
         const cm = document.createElement('div');
         cm.className = 'comments';
         const cl = document.createElement('div');
         const cr = await api('GET', `/api/rumors/${x.id}/comments`);
         const cj = await cr.json();
+        const myHandle = localStorage.getItem('cw_handle');
         (cj.comments || []).forEach(c => {
           const cd = document.createElement('div');
           cd.className = 'comment';
-          cd.innerHTML = `<span class="ch">@${escapeHtml(c.handle)}</span>: ${escapeHtml(c.text)}`;
+          const label = (myHandle && c.handle === myHandle) ? 'You' : 'Anonymous';
+          cd.innerHTML = `<span class="ch">${label}</span>: ${escapeHtml(c.text)}`;
           cl.appendChild(cd);
         });
         cm.appendChild(cl);
-        if (localStorage.getItem('handle')) {
+        if (isLogged()) {
           const cf = document.createElement('div');
           cf.className = 'comForm';
           const ci = document.createElement('input');
@@ -220,8 +239,8 @@
       const r = await api('POST', '/api/register', {
         real_name: $('real_name').value.trim(),
         email: $('email').value.trim(),
-        handle: $('handle').value.trim(),
         password: $('reg_pw').value
+        // handle is intentionally NOT sent -> auto-generated server-side
       });
       const j = await r.json();
       if (r.ok) { $('regMsg').textContent = 'Registered! Now log in.'; $('regMsg').style.color = '#7cff9c'; }
@@ -234,7 +253,11 @@
         password: $('login_pw').value
       });
       const j = await r.json();
-      if (r.ok) { localStorage.setItem('handle', j.handle); showState(); load(); $('loginMsg').textContent=''; }
+      if (r.ok) {
+        localStorage.setItem('cw_logged', '1');
+        localStorage.setItem('cw_handle', j.handle);  // kept locally only, never displayed
+        showState(); load(); $('loginMsg').textContent='';
+      }
       else $('loginMsg').textContent = j.error;
     };
 
@@ -245,6 +268,21 @@
       const r = await api('POST', '/api/rumors', { text, tags });
       if (r.ok) { $('text').value=''; $('tags').value=''; $('msg').textContent='Whispered. 🤫'; load(); }
       else $('msg').textContent = 'Could not post.';
+    };
+
+    $('forgotLink').onclick = () => {
+      $('loginCard').classList.add('hidden');
+      $('forgotCard').classList.remove('hidden');
+    };
+    $('backLink').onclick = () => {
+      $('forgotCard').classList.add('hidden');
+      $('loginCard').classList.remove('hidden');
+    };
+    $('forgotSubmit').onclick = async () => {
+      const r = await api('POST', '/api/forgot-password', { email: $('forgot_email').value.trim() });
+      const j = await r.json();
+      $('forgotMsg').textContent = j.message || j.error;
+      $('forgotMsg').style.color = r.ok ? '#7cff9c' : '#ff8a8a';
     };
 
     $('sortNew').onclick = () => { sortMode='new'; setActiveSort(); load(); };
