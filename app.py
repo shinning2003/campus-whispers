@@ -224,8 +224,10 @@ def create_app(config=None):
             )
             reacted = True
         conn.commit()
+        counts = _reaction_counts(conn, rid)
         conn.close()
-        return jsonify({"ok": True, "reacted": reacted, "kind": kind})
+        return jsonify({"ok": True, "reacted": reacted, "kind": kind,
+                        "count": counts.get(kind, 0), "reactions": counts})
 
     @app.post("/api/rumors/<int:rid>/metoo")
     def metoo(rid):
@@ -244,14 +246,17 @@ def create_app(config=None):
                 "DELETE FROM me_too WHERE user_id=? AND rumor_id=?",
                 (session["user_id"], rid),
             )
+            active = False
         else:
             exec(conn,
                 "INSERT INTO me_too (user_id, rumor_id) VALUES (?,?)",
                 (session["user_id"], rid),
             )
+            active = True
         conn.commit()
+        count = _me_too_count(conn, rid)
         conn.close()
-        return jsonify({"ok": True})
+        return jsonify({"ok": True, "active": active, "count": count})
 
 
     # --- Feature 2: Anonymous comments ---

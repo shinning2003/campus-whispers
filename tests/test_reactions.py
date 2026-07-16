@@ -35,10 +35,14 @@ def test_react_toggles_on_and_off(client):
     rid = _post(client, "aaa", "a@x.com", "hi")
     r = client.post(f"/api/rumors/{rid}/react", json={"kind": "fire"})
     assert r.status_code == 200
-    assert r.get_json()["reacted"] is True
+    body = r.get_json()
+    assert body["reacted"] is True
+    assert body["count"] == 1  # live count returned for instant UI update
     # toggle off
     r = client.post(f"/api/rumors/{rid}/react", json={"kind": "fire"})
-    assert r.get_json()["reacted"] is False
+    body = r.get_json()
+    assert body["reacted"] is False
+    assert body["count"] == 0
 
 
 def test_react_counts_aggregate_per_kind(client):
@@ -58,9 +62,13 @@ def test_react_counts_aggregate_per_kind(client):
 
 def test_metoo_toggle_and_count(client):
     rid = _post(client, "aaa", "a@x.com", "I failed my exam")
-    client.post(f"/api/rumors/{rid}/metoo")
+    r = client.post(f"/api/rumors/{rid}/metoo")
+    body = r.get_json()
+    assert body["active"] is True
+    assert body["count"] == 1  # live count for instant UI update
     register_and_login(client, handle="bbb", email="b@x.com")
-    client.post(f"/api/rumors/{rid}/metoo")
+    r = client.post(f"/api/rumors/{rid}/metoo")
+    assert r.get_json()["count"] == 2
     feed = client.get("/api/rumors").get_json()["rumors"][0]
     assert feed["me_too_count"] == 2
 

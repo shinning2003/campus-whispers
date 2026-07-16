@@ -157,12 +157,21 @@
 
     async function toggleReact(rid, kind, btn) {
       const r = await api('POST', `/api/rumors/${rid}/react`, { kind });
-      if (r.ok) { const j = await r.json(); btn.classList.toggle('on', j.reacted); }
+      if (r.ok) {
+        const j = await r.json();
+        btn.classList.toggle('on', j.reacted);
+        // Live count update (no refresh needed)
+        btn.textContent = `${REACTIONS[kind]} ${j.count}`;
+      }
     }
 
     async function toggleMeToo(rid, btn) {
       const r = await api('POST', `/api/rumors/${rid}/metoo`);
-      if (r.ok) btn.classList.toggle('on');
+      if (r.ok) {
+        const j = await r.json();
+        btn.classList.toggle('on', j.active);
+        btn.textContent = `🙋 Me too${j.count ? ' ' + j.count : ''}`;
+      }
     }
 
     async function postComment(rid, input) {
@@ -184,7 +193,7 @@
         const d = document.createElement('div');
         d.className = 'rumor';
         const tags = (x.tags || []).map(t => `<span class="tag">#${escapeHtml(t)}</span>`).join('');
-        d.innerHTML = `<div><span class="handle">@${escapeHtml(x.handle)}</span></div>
+        d.innerHTML = `<div><span class="handle">Anonymous</span></div>
           <div style="margin-top:6px">${escapeHtml(x.text)}</div>
           ${tags ? `<div class="tags">${tags}</div>` : ''}
           <div class="meta">${new Date(x.created_at).toLocaleString()} · 💬 ${x.comment_count||0} · 🙋 ${x.me_too_count||0}</div>`;
@@ -200,7 +209,7 @@
         const mt = document.createElement('div');
         mt.className = 'metoo';
         const mb = document.createElement('button');
-        mb.textContent = '🙋 Me too';
+        mb.textContent = `🙋 Me too${x.me_too_count ? ' ' + x.me_too_count : ''}`;
         mb.onclick = () => toggleMeToo(x.id, mb);
         mt.appendChild(mb);
         d.appendChild(mt);
