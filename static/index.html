@@ -48,6 +48,9 @@
     .tags { margin-top:8px; }
     .tag { display:inline-block; background:#222a52; color:var(--muted); font-size:.72rem;
            padding:2px 8px; border-radius:10px; margin-right:4px; }
+    .tagbtn { margin-top:0; padding:6px 14px; font-size:.85rem; background:#222a52;
+              border-radius:20px; margin-right:6px; }
+    .tagbtn.active { background: var(--accent); }
     .linkbtn { background:none; color:var(--muted); padding:0; margin-top:8px;
                text-decoration:underline; font-size:.82rem; cursor:pointer; }
     @media (max-width: 520px) {
@@ -99,7 +102,11 @@
     <div class="card hidden" id="composeCard">
       <span id="who"></span>
       <textarea id="text" placeholder="Whisper something about class..." maxlength="500"></textarea>
-      <input id="tags" placeholder="Tags (comma separated, e.g. exam, hostel)" style="margin-top:8px" />
+      <div class="tagpick" style="margin-top:10px">
+        <span style="color:var(--muted);font-size:.82rem;margin-right:6px">Category:</span>
+        <button type="button" class="tagbtn active" data-tag="rumors">rumors</button>
+        <button type="button" class="tagbtn" data-tag="exam">exam</button>
+      </div>
       <button id="post">Whisper</button>
       <div class="msg" id="msg"></div>
     </div>
@@ -270,12 +277,22 @@
       else $('loginMsg').textContent = j.error;
     };
 
+    // Category tag picker (single-select: rumors default, or exam)
+    let selectedTag = 'rumors';
+    document.querySelectorAll('.tagbtn').forEach(b => {
+      b.onclick = () => {
+        document.querySelectorAll('.tagbtn').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+        selectedTag = b.dataset.tag;
+      };
+    });
+
     $('post').onclick = async () => {
       const text = $('text').value.trim();
       if (!text) { $('msg').textContent = 'Write something first.'; return; }
-      const tags = $('tags').value.split(',').map(t => t.trim()).filter(Boolean);
+      const tags = [selectedTag];
       const r = await api('POST', '/api/rumors', { text, tags });
-      if (r.ok) { $('text').value=''; $('tags').value=''; $('msg').textContent='Whispered. 🤫'; load(); }
+      if (r.ok) { $('text').value=''; $('msg').textContent='Whispered. 🤫'; load(); }
       else $('msg').textContent = 'Could not post.';
     };
 
