@@ -242,24 +242,36 @@ def get_db(db_path=None):
         try:
             import psycopg
             from psycopg.rows import dict_row
-            # Force IPv4: some hosts (Supabase) resolve to an IPv6 address
-            # that Render/other platforms can't route to, causing
-            # "Network is unreachable". Pre-resolve to an A record and pin it.
             import socket
-            from urllib.parse import urlparse
+            from urllib.parse import urlparse, urlunparse
+
+            # Force IPv4: Render's free tier cannot route to Supabase's IPv6
+            # address, so connecting to db.<ref>.supabase.co yields
+            # "Network is unreachable". psycopg 3 does NOT accept `hostaddr`
+            # as a connect kwarg (it raises TypeError), so we pre-resolve to an
+            # A record and pin the literal IPv4 address directly into the
+            # connection URL. libpq then connects to the IP with no AAAA lookup.
             parsed = urlparse(url)
             host = parsed.hostname
             if host and not _looks_like_ip(host):
                 try:
-                    ipv4 = socket.getaddrinfo(host, None, socket.AF_INET)[0][4][0]
-                    # psycopg accepts hostaddr to bypass DNS family selection
-                    url = url.replace(f"//{parsed.username}@", f"//{parsed.username}@", 1)
-                    conn = psycopg.connect(url, row_factory=dict_row,
-                                           hostaddr=ipv4,
-                                           connect_timeout=10)
-                    return conn
+                    addrs = socket.getaddrinfo(host, None, socket.AF_INET)
+                    if addrs:
+                        ipv4 = addrs[0][4][0]
+                        auth = ""
+                        if parsed.username is not None:
+                            auth = parsed.username
+                            if parsed.password is not None:
+                                auth += ":" + parsed.password
+                        netloc = (auth + "@") if auth else ""
+                        netloc += ipv4
+                        if parsed.port:
+                            netloc += ":" + str(parsed.port)
+                        parsed = parsed._replace(netloc=netloc)
+                        url = urlunparse(parsed)
                 except Exception:
-                    pass  # fall back to normal connect if resolve fails
+                    pass  # keep original URL if resolution fails
+
             conn = psycopg.connect(url, row_factory=dict_row, connect_timeout=10)
             return conn
         except ImportError:
