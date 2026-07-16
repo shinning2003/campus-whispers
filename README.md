@@ -41,9 +41,28 @@ venv\Scripts\python run.py
 venv\Scripts\python -m pytest -q
 ```
 
-Covers: register/login, password hashing, handle-only public feed,
-admin identity reveal, ban, security headers, semantic HTML, and the
-pluggable DB layer (SQLite local / Postgres in prod).
+61 tests covering: register/login, password hashing, handle-only public feed,
+admin identity reveal, ban, security headers, semantic HTML, the pluggable DB
+layer (SQLite local / Postgres in prod), **and the engagement suite**:
+
+| Feature | What it adds | Psych lever |
+|---|---|---|
+| Reactions (😂🔥💯😮) + "Me too" | `POST /api/rumors/<id>/react`, `/metoo` | Tribe reward / "I am not alone" |
+| Anonymous comments | `POST/GET /api/rumors/<id>/comments`, `DELETE /api/comments/<id>` | Investment + Tribe |
+| Posting streak | `GET /api/me` (streak + at-risk flag, 1-day grace) | Self reward / loss aversion |
+| Hot/Rising feed + teaser | `GET /api/rumors?sort=hot|rising`, `/<id>/teaser` | Hunt reward / curiosity gap |
+| Tags + follow | `GET /api/tags`, `POST/DELETE /api/tags/<name>/follow`, `GET /api/me/tags`, post `tags[]` | Investment / internal trigger |
+| Daily digest | `POST /api/admin/digest/send` (admin) | External trigger (email) |
+
+## Engagement design notes
+
+Built from real research, not guesswork:
+- **Hook Model (Nir Eyal)**: Trigger -> Action -> Variable Reward -> Investment.
+- **Information-Gap Theory (Loewenstein)**: the `/teaser` endpoint hides text
+  to open a curiosity gap that pulls a click.
+- **Streak grace window**: a single missed day does NOT reset the streak
+  (Nikzad 2021 - broken streaks cause 22% churn unless recoverable within 72h).
+- Reactions/comments never leak real name or email in public responses.
 
 ## Deploy: Render (free web) + Supabase Postgres (free, no expiry)
 

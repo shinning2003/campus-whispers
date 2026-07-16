@@ -28,9 +28,26 @@
     .rumor .meta { color: var(--muted); font-size:.75rem; margin-top:8px; }
     .handle { font-weight:600; color: var(--accent); }
     .topbar { text-align:right; font-size:.85rem; color: var(--muted); }
+    .streak { color:#ffd166; font-weight:600; }
     a { color: var(--muted); }
     .hidden { display:none; }
     .foot { text-align:center; color: var(--muted); font-size:.8rem; padding: 24px 16px 40px; }
+    .controls { display:flex; gap:8px; flex-wrap:wrap; margin:16px 0 4px; }
+    .controls button { margin-top:0; padding:7px 12px; font-size:.85rem; background:#222a52; }
+    .controls button.active { background: var(--accent); }
+    .reactions { margin-top:10px; display:flex; gap:6px; flex-wrap:wrap; }
+    .reactions button { margin-top:0; padding:5px 10px; font-size:.85rem; background:#222a52; }
+    .reactions button.on { background: var(--accent); }
+    .metoo { margin-top:8px; }
+    .metoo button { margin-top:0; padding:5px 10px; font-size:.8rem; background:#222a52; }
+    .comments { margin-top:10px; border-top:1px solid #2c3361; padding-top:8px; }
+    .comment { font-size:.85rem; padding:5px 0; border-bottom:1px solid #20264a; }
+    .comment .ch { color: var(--accent); font-weight:600; }
+    .comForm { display:flex; gap:6px; margin-top:8px; }
+    .comForm input { margin-top:0; }
+    .tags { margin-top:8px; }
+    .tag { display:inline-block; background:#222a52; color:var(--muted); font-size:.72rem;
+           padding:2px 8px; border-radius:10px; margin-right:4px; }
     @media (max-width: 520px) {
       h1 { font-size: 1.5rem; }
       .wrap { padding: 0 10px 40px; }
@@ -46,7 +63,6 @@
   <main class="wrap">
     <div class="topbar" id="topbar"></div>
 
-    <!-- Register -->
     <div class="card" id="registerCard">
       <strong>First time? Create your account</strong>
       <input id="real_name" placeholder="Real name (admin only sees this)" />
@@ -57,7 +73,6 @@
       <div class="msg" id="regMsg"></div>
     </div>
 
-    <!-- Login -->
     <div class="card hidden" id="loginCard">
       <strong>Log in to post</strong>
       <input id="identifier" placeholder="Handle or email" />
@@ -66,12 +81,18 @@
       <div class="msg" id="loginMsg"></div>
     </div>
 
-    <!-- Compose -->
     <div class="card hidden" id="composeCard">
       <span id="who"></span>
       <textarea id="text" placeholder="Whisper something about class..." maxlength="500"></textarea>
+      <input id="tags" placeholder="Tags (comma separated, e.g. exam, hostel)" style="margin-top:8px" />
       <button id="post">Whisper</button>
       <div class="msg" id="msg"></div>
+    </div>
+
+    <div class="controls">
+      <button id="sortNew" class="active">New</button>
+      <button id="sortHot">Hot</button>
+      <button id="sortRising">Rising</button>
     </div>
 
     <div id="feed"></div>
@@ -85,23 +106,55 @@
       method, headers: {'Content-Type':'application/json'},
       body: body ? JSON.stringify(body) : undefined
     });
+    const REACTIONS = { laugh:'😂', fire:'🔥', hundred:'💯', shock:'😮' };
+
+    let sortMode = 'new';
 
     function showState() {
       const logged = !!localStorage.getItem('handle');
       $('registerCard').classList.toggle('hidden', logged);
       $('loginCard').classList.toggle('hidden', logged);
       $('composeCard').classList.toggle('hidden', !logged);
-      $('topbar').innerHTML = logged
-        ? `Logged in as <span class="handle">${localStorage.getItem('handle')}</span> · <a href="#" id="logout">logout</a>`
-        : '';
-      if (logged) $('who').textContent = `Posting as ${localStorage.getItem('handle')}`;
-      if (logged) $('logout').onclick = () => { localStorage.clear(); location.reload(); };
+      if (logged) {
+        $('who').textContent = `Posting as ${localStorage.getItem('handle')}`;
+        $('topbar').innerHTML = `Logged in as <span class="handle">${localStorage.getItem('handle')}</span> · <a href="#" id="logout">logout</a>`;
+        $('logout').onclick = () => { localStorage.clear(); location.reload(); };
+        loadMe();
+      } else {
+        $('topbar').innerHTML = '';
+      }
     }
 
-    function escapeHtml(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+    function escapeHtml(s){return s.replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));}
+
+    async function loadMe() {
+      const r = await api('GET', '/api/me');
+      if (r.ok) {
+        const j = await r.json();
+        const s = j.streak > 0 ? ` · <span class="streak">🔥 ${j.streak}-day streak${j.streak_at_risk_today ? ' (don\'t lose it today!)' : ''}</span>` : '';
+        $('topbar').innerHTML += s;
+      }
+    }
+
+    async function toggleReact(rid, kind, btn) {
+      const r = await api('POST', `/api/rumors/${rid}/react`, { kind });
+      if (r.ok) { const j = await r.json(); btn.classList.toggle('on', j.reacted); }
+    }
+
+    async function toggleMeToo(rid, btn) {
+      const r = await api('POST', `/api/rumors/${rid}/metoo`);
+      if (r.ok) btn.classList.toggle('on');
+    }
+
+    async function postComment(rid, input) {
+      const text = input.value.trim();
+      if (!text) return;
+      const r = await api('POST', `/api/rumors/${rid}/comments`, { text });
+      if (r.ok) { input.value=''; load(); }
+    }
 
     async function load() {
-      const r = await api('GET', '/api/rumors');
+      const r = await api('GET', '/api/rumors?sort=' + sortMode);
       const data = await r.json();
       $('feed').innerHTML = '';
       if (!data.rumors.length) {
@@ -111,9 +164,54 @@
       for (const x of data.rumors) {
         const d = document.createElement('div');
         d.className = 'rumor';
+        const tags = (x.tags || []).map(t => `<span class="tag">#${escapeHtml(t)}</span>`).join('');
         d.innerHTML = `<div><span class="handle">@${escapeHtml(x.handle)}</span></div>
           <div style="margin-top:6px">${escapeHtml(x.text)}</div>
-          <div class="meta">${new Date(x.created_at).toLocaleString()}</div>`;
+          ${tags ? `<div class="tags">${tags}</div>` : ''}
+          <div class="meta">${new Date(x.created_at).toLocaleString()} · 💬 ${x.comment_count||0} · 🙋 ${x.me_too_count||0}</div>`;
+        // reactions
+        const rc = document.createElement('div');
+        rc.className = 'reactions';
+        for (const [k, emoji] of Object.entries(REACTIONS)) {
+          const b = document.createElement('button');
+          b.textContent = `${emoji} ${x.reactions ? x.reactions[k] : 0}`;
+          b.onclick = () => toggleReact(x.id, k, b);
+          rc.appendChild(b);
+        }
+        d.appendChild(rc);
+        // me too
+        const mt = document.createElement('div');
+        mt.className = 'metoo';
+        const mb = document.createElement('button');
+        mb.textContent = '🙋 Me too';
+        mb.onclick = () => toggleMeToo(x.id, mb);
+        mt.appendChild(mb);
+        d.appendChild(mt);
+        // comments
+        const cm = document.createElement('div');
+        cm.className = 'comments';
+        const cl = document.createElement('div');
+        const cr = await api('GET', `/api/rumors/${x.id}/comments`);
+        const cj = await cr.json();
+        (cj.comments || []).forEach(c => {
+          const cd = document.createElement('div');
+          cd.className = 'comment';
+          cd.innerHTML = `<span class="ch">@${escapeHtml(c.handle)}</span>: ${escapeHtml(c.text)}`;
+          cl.appendChild(cd);
+        });
+        cm.appendChild(cl);
+        if (localStorage.getItem('handle')) {
+          const cf = document.createElement('div');
+          cf.className = 'comForm';
+          const ci = document.createElement('input');
+          ci.placeholder = 'Add a comment...';
+          const cbtn = document.createElement('button');
+          cbtn.textContent = 'Reply';
+          cbtn.onclick = () => postComment(x.id, ci);
+          cf.appendChild(ci); cf.appendChild(cbtn);
+          cm.appendChild(cf);
+        }
+        d.appendChild(cm);
         $('feed').appendChild(d);
       }
     }
@@ -143,10 +241,19 @@
     $('post').onclick = async () => {
       const text = $('text').value.trim();
       if (!text) { $('msg').textContent = 'Write something first.'; return; }
-      const r = await api('POST', '/api/rumors', { text });
-      if (r.ok) { $('text').value=''; $('msg').textContent='Whispered. 🤫'; load(); }
+      const tags = $('tags').value.split(',').map(t => t.trim()).filter(Boolean);
+      const r = await api('POST', '/api/rumors', { text, tags });
+      if (r.ok) { $('text').value=''; $('tags').value=''; $('msg').textContent='Whispered. 🤫'; load(); }
       else $('msg').textContent = 'Could not post.';
     };
+
+    $('sortNew').onclick = () => { sortMode='new'; setActiveSort(); load(); };
+    $('sortHot').onclick = () => { sortMode='hot'; setActiveSort(); load(); };
+    $('sortRising').onclick = () => { sortMode='rising'; setActiveSort(); load(); };
+    function setActiveSort() {
+      ['New','Hot','Rising'].forEach(s => $(`sort${s}`).classList.remove('active'));
+      $(`sort${sortMode.charAt(0).toUpperCase()+sortMode.slice(1)}`).classList.add('active');
+    }
 
     showState();
     load();
