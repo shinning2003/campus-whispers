@@ -13,6 +13,7 @@ def client(tmp_path):
         # Clean-slate schema each test so runs against a shared Postgres
         # (Supabase) don't collide on UNIQUE email/handle from prior runs.
         conn = get_db()
+        conn.execute("DROP TABLE IF EXISTS challenge_claims")
         conn.execute("DROP TABLE IF EXISTS reactions")
         conn.execute("DROP TABLE IF EXISTS me_too")
         conn.execute("DROP TABLE IF EXISTS comments")

@@ -334,12 +334,85 @@ def create_app(config=None):
         if not session.get("user_id"):
             return jsonify({"error": "Login required."}), 401
         conn = get_db()
+        uid = session["user_id"]
         row = exec(conn, "SELECT handle FROM users WHERE id=?",
-                   (session["user_id"],)).fetchone()
-        streak, at_risk = _compute_streak(conn, session["user_id"])
+                   (uid,)).fetchone()
+        streak, at_risk = _compute_streak(conn, uid)
+        points = _compute_points(conn, uid)
+        badges = _compute_badges(conn, uid)
+        rank = _user_rank(conn, uid)
         conn.close()
         return jsonify({"handle": row["handle"], "streak": streak,
-                        "streak_at_risk_today": at_risk})
+                        "streak_at_risk_today": at_risk,
+                        "points": points, "badges": badges, "rank": rank})
+
+    # --- Reward system: challenges, leaderboard (anonymized) ---
+    @app.get("/api/challenges")
+    def list_challenges():
+        if not session.get("user_id"):
+            return jsonify({"error": "Login required."}), 401
+        conn = get_db()
+        uid = session["user_id"]
+        week = _current_week()
+        claimed = set()
+        for r in exec(conn,
+                "SELECT challenge_key FROM challenge_claims WHERE user_id=? AND week=?",
+                (uid, week)).fetchall():
+            claimed.add(r[0] if not hasattr(r, "keys") else r["challenge_key"])
+        out = []
+        for key, label, goal, reward, kind in CHALLENGE_DEFS:
+            progress = _challenge_progress(conn, uid, kind)
+            out.append({
+                "key": key, "label": label, "goal": goal, "reward": reward,
+                "progress": min(progress, goal),
+                "completed": progress >= goal,
+                "claimed": key in claimed,
+            })
+        conn.close()
+        return jsonify({"week": week, "challenges": out})
+
+    @app.post("/api/challenges/<key>/claim")
+    def claim_challenge(key):
+        if not session.get("user_id"):
+            return jsonify({"error": "Login required."}), 401
+        cdef = next((c for c in CHALLENGE_DEFS if c[0] == key), None)
+        if not cdef:
+            return jsonify({"error": "Unknown challenge."}), 404
+        _k, _label, goal, _reward, kind = cdef
+        conn = get_db()
+        uid = session["user_id"]
+        week = _current_week()
+        if _challenge_progress(conn, uid, kind) < goal:
+            conn.close()
+            return jsonify({"error": "Challenge not complete yet."}), 400
+        already = exec(conn,
+            "SELECT 1 FROM challenge_claims WHERE user_id=? AND challenge_key=? AND week=?",
+            (uid, key, week)).fetchone()
+        if already:
+            conn.close()
+            return jsonify({"error": "Already claimed this week."}), 400
+        exec(conn,
+            "INSERT INTO challenge_claims (user_id, challenge_key, week, claimed_at) "
+            "VALUES (?,?,?,?)",
+            (uid, key, week, datetime.now(timezone.utc).isoformat()))
+        conn.commit()
+        points = _compute_points(conn, uid)
+        conn.close()
+        return jsonify({"ok": True, "claimed": key, "points": points})
+
+    @app.get("/api/leaderboard")
+    def leaderboard():
+        conn = get_db()
+        ids = [r[0] if not hasattr(r, "keys") else r["id"]
+               for r in exec(conn, "SELECT id FROM users WHERE banned=0", ()).fetchall()]
+        scored = sorted(((uid, _compute_points(conn, uid)) for uid in ids),
+                        key=lambda t: t[1], reverse=True)
+        conn.close()
+        # Anonymized: alias only (Player #N), never the handle/email/real_name.
+        out = []
+        for i, (uid, pts) in enumerate(scored[:10], start=1):
+            out.append({"rank": i, "alias": f"Player #{i}", "points": pts})
+        return jsonify({"leaderboard": out})
 
 
     # --- Feature 5: Tags + follow-a-tag (Investment / internal trigger) ---
@@ -514,6 +587,21 @@ def create_app(config=None):
         conn.close()
         return jsonify({"ok": True, "deleted": rid})
 
+    @app.post("/api/admin/rumors/<int:rid>/feature")
+    def admin_feature_rumor(rid):
+        # Variable-reward surprise: admin (or a future random job) marks a
+        # whisper 'featured' — an unpredictable bonus that drives re-checking.
+        if not session.get("admin"):
+            return jsonify({"error": "Unauthorized."}), 401
+        conn = get_db()
+        if not exec(conn, "SELECT 1 FROM rumors WHERE id=?", (rid,)).fetchone():
+            conn.close()
+            return jsonify({"error": "Rumor not found."}), 404
+        exec(conn, "UPDATE rumors SET featured=1 WHERE id=?", (rid,))
+        conn.commit()
+        conn.close()
+        return jsonify({"ok": True, "featured": rid})
+
     @app.get("/api/admin/users")
     def admin_users():
         if not session.get("admin"):
@@ -634,7 +722,26 @@ def rumor_public(row, conn=None):
         data["me_too_count"] = _me_too_count(conn, row["id"])
         data["comment_count"] = _comment_count(conn, row["id"])
         data["tags"] = _rumor_tags(conn, row["id"])
+        # Variable-reward surprise: is this post featured?
+        frow = exec(conn, "SELECT featured FROM rumors WHERE id=?",
+                    (row["id"],)).fetchone()
+        data["featured"] = int(frow["featured"]) if frow and frow["featured"] is not None else 0
+    # Rising-star gentle floor: flag posts < 24h old so the UI can soften
+    # 0-reaction "failure" (research: youth are sensitive to absent feedback).
+    data["is_new"] = _is_new(row["created_at"])
     return data
+
+
+def _is_new(created_at):
+    """True if the post is less than 24h old."""
+    from datetime import datetime, timezone, timedelta
+    try:
+        ts = datetime.fromisoformat(str(created_at).replace("Z", "+00:00"))
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - ts) < timedelta(hours=24)
+    except Exception:
+        return False
 
 
 def _rumor_tags(conn, rumor_id):
@@ -908,6 +1015,21 @@ def init_db(db_path=None):
                 FOREIGN KEY (tag_id) REFERENCES tags(id)
             )"""
         )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS challenge_claims (
+                user_id INTEGER NOT NULL,
+                challenge_key TEXT NOT NULL,
+                week TEXT NOT NULL,
+                claimed_at TEXT NOT NULL,
+                PRIMARY KEY (user_id, challenge_key, week),
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )"""
+        )
+        # Variable-reward surprise: a post can be randomly "featured".
+        try:
+            conn.execute("ALTER TABLE rumors ADD COLUMN featured INTEGER NOT NULL DEFAULT 0")
+        except Exception:
+            pass  # column already exists
     else:  # Postgres (Supabase)
         conn.execute(
             """CREATE TABLE IF NOT EXISTS users (
@@ -973,6 +1095,17 @@ def init_db(db_path=None):
                 PRIMARY KEY (user_id, tag_id)
             )"""
         )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS challenge_claims (
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                challenge_key TEXT NOT NULL,
+                week TEXT NOT NULL,
+                claimed_at TEXT NOT NULL,
+                PRIMARY KEY (user_id, challenge_key, week)
+            )"""
+        )
+        conn.execute(
+            "ALTER TABLE rumors ADD COLUMN IF NOT EXISTS featured INTEGER NOT NULL DEFAULT 0")
     conn.commit()
     conn.close()
 
@@ -991,3 +1124,125 @@ def _generate_handle(conn):
                      (handle,)).fetchone()
         if not exists:
             return handle
+
+
+# ============================================================
+# Reward system (research-grounded — see engagement-feature-design skill)
+# Points are the engine (correlate with all engagement types); badges are
+# decoration; challenges refresh weekly (beat novelty wear-off); leaderboard
+# is anonymized (privacy prerequisite for an anon board).
+# ============================================================
+
+# Points economy (kept small + legible).
+PTS_POST = 10
+PTS_COMMENT = 3
+PTS_REACT_GIVEN = 1
+PTS_REACT_RECEIVED = 2
+PTS_METOO_RECEIVED = 2
+
+# Milestone badges: key -> (label, threshold on post count) or custom.
+BADGE_DEFS = [
+    ("first_whisper", "First Whisper", 1),
+    ("ten_whispers", "10 Whispers", 10),
+    ("fifty_whispers", "50 Whispers", 50),
+    ("hundred_whispers", "Century Club", 100),
+]
+
+# Weekly challenges: key -> (label, goal, reward points, kind).
+CHALLENGE_DEFS = [
+    ("post_3", "Post 3 whispers this week", 3, 30, "post"),
+    ("comment_5", "Leave 5 comments this week", 5, 25, "comment"),
+    ("react_10", "React to 10 whispers this week", 10, 20, "react"),
+]
+
+
+def _current_week():
+    """ISO year-week string, e.g. '2026-W29' — used to scope challenges."""
+    from datetime import datetime, timezone
+    iso = datetime.now(timezone.utc).isocalendar()
+    return f"{iso[0]}-W{iso[1]:02d}"
+
+
+def _week_start_iso():
+    """UTC midnight of Monday this week, ISO string for created_at compares."""
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone.utc)
+    monday = now - timedelta(days=now.weekday())
+    monday = monday.replace(hour=0, minute=0, second=0, microsecond=0)
+    return monday.isoformat()
+
+
+def _count(conn, sql, params):
+    row = exec(conn, sql, params).fetchone()
+    if not row:
+        return 0
+    # row may be a dict-like or tuple depending on driver
+    try:
+        return int(row[0]) if not hasattr(row, "keys") else int(list(row)[0])
+    except Exception:
+        return int(row["c"]) if "c" in getattr(row, "keys", lambda: [])() else 0
+
+
+def _compute_points(conn, user_id):
+    """Sum a user's points from their activity across existing tables."""
+    posts = _count(conn, "SELECT COUNT(*) FROM rumors WHERE user_id=?", (user_id,))
+    comments = _count(conn, "SELECT COUNT(*) FROM comments WHERE user_id=?", (user_id,))
+    react_given = _count(conn, "SELECT COUNT(*) FROM reactions WHERE user_id=?", (user_id,))
+    react_recv = _count(conn,
+        "SELECT COUNT(*) FROM reactions rx JOIN rumors r ON r.id=rx.rumor_id "
+        "WHERE r.user_id=?", (user_id,))
+    metoo_recv = _count(conn,
+        "SELECT COUNT(*) FROM me_too m JOIN rumors r ON r.id=m.rumor_id "
+        "WHERE r.user_id=?", (user_id,))
+    # claimed challenge rewards
+    claim_pts = 0
+    rows = exec(conn,
+        "SELECT challenge_key FROM challenge_claims WHERE user_id=?",
+        (user_id,)).fetchall()
+    reward_by_key = {c[0]: c[3] for c in CHALLENGE_DEFS}
+    for r in rows:
+        key = r[0] if not hasattr(r, "keys") else r["challenge_key"]
+        claim_pts += reward_by_key.get(key, 0)
+    return (posts * PTS_POST + comments * PTS_COMMENT +
+            react_given * PTS_REACT_GIVEN + react_recv * PTS_REACT_RECEIVED +
+            metoo_recv * PTS_METOO_RECEIVED + claim_pts)
+
+
+def _compute_badges(conn, user_id):
+    """Return unlocked badges (list of {key,label}) based on post count."""
+    posts = _count(conn, "SELECT COUNT(*) FROM rumors WHERE user_id=?", (user_id,))
+    out = []
+    for key, label, threshold in BADGE_DEFS:
+        if posts >= threshold:
+            out.append({"key": key, "label": label})
+    return out
+
+
+def _challenge_progress(conn, user_id, kind):
+    """Count this-week activity for a challenge kind."""
+    ws = _week_start_iso()
+    if kind == "post":
+        return _count(conn,
+            "SELECT COUNT(*) FROM rumors WHERE user_id=? AND created_at>=?",
+            (user_id, ws))
+    if kind == "comment":
+        return _count(conn,
+            "SELECT COUNT(*) FROM comments WHERE user_id=? AND created_at>=?",
+            (user_id, ws))
+    if kind == "react":
+        # reactions table has no created_at; count all this user's reactions
+        return _count(conn, "SELECT COUNT(*) FROM reactions WHERE user_id=?",
+                      (user_id,))
+    return 0
+
+
+def _user_rank(conn, user_id):
+    """1-based rank of a user by points (higher points = better rank)."""
+    ids = [r[0] if not hasattr(r, "keys") else r["id"]
+           for r in exec(conn, "SELECT id FROM users WHERE banned=0", ()).fetchall()]
+    scored = sorted(((uid, _compute_points(conn, uid)) for uid in ids),
+                    key=lambda t: t[1], reverse=True)
+    for i, (uid, _pts) in enumerate(scored, start=1):
+        if uid == user_id:
+            return i
+    return None

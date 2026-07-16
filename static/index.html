@@ -51,6 +51,21 @@
     .tagbtn { margin-top:0; padding:6px 14px; font-size:.85rem; background:#222a52;
               border-radius:20px; margin-right:6px; }
     .tagbtn.active { background: var(--accent); }
+    .pts { color:#ffd166; font-weight:600; }
+    .muted { color: var(--muted); font-size:.8rem; }
+    .rsection { margin-top:12px; }
+    .rlabel { font-size:.8rem; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px; }
+    .badgewrap { display:flex; flex-wrap:wrap; gap:6px; }
+    .badge { background:#2a2050; color:#ffd166; font-size:.78rem; padding:4px 10px; border-radius:12px; }
+    .chall { margin:8px 0; }
+    .chall-top { display:flex; justify-content:space-between; align-items:center; font-size:.88rem; gap:8px; }
+    .claimBtn { margin-top:0; padding:4px 12px; font-size:.8rem; background:#28a745; border-radius:14px; }
+    .bar { background:#12152e; border-radius:8px; height:7px; margin:5px 0; overflow:hidden; }
+    .fill { background:var(--accent); height:100%; border-radius:8px; transition:width .3s; }
+    .lbrow { display:flex; justify-content:space-between; font-size:.85rem; padding:4px 0; border-bottom:1px solid #20264a; }
+    summary { cursor:pointer; }
+    .featured-badge { display:inline-block; background:linear-gradient(90deg,#ffd166,#ff7c5c); color:#1a1f3d; font-weight:700; font-size:.72rem; padding:2px 8px; border-radius:10px; margin-left:6px; }
+    .soft { color: var(--muted); opacity:.8; font-style:italic; }
     .linkbtn { background:none; color:var(--muted); padding:0; margin-top:8px;
                text-decoration:underline; font-size:.82rem; cursor:pointer; }
     @media (max-width: 520px) {
@@ -110,6 +125,16 @@
       <div class="msg" id="msg"></div>
     </div>
 
+    <!-- Rewards panel (only meaningful when logged in) -->
+    <div class="card hidden" id="rewardsCard">
+      <details open>
+        <summary><strong>🏆 Your rewards</strong></summary>
+        <div class="rsection"><div class="rlabel">Badges</div><div id="badges" class="badgewrap"></div></div>
+        <div class="rsection"><div class="rlabel">Weekly challenges</div><div id="challenges"></div></div>
+        <div class="rsection"><div class="rlabel">Leaderboard (anonymized)</div><div id="leaderboard"></div></div>
+      </details>
+    </div>
+
     <div class="controls">
       <button id="filterAll" class="active">All</button>
       <button id="filterRumors">rumors</button>
@@ -139,6 +164,7 @@
       $('registerCard').classList.toggle('hidden', logged);
       $('loginCard').classList.toggle('hidden', logged);
       $('composeCard').classList.toggle('hidden', !logged);
+      $('rewardsCard').classList.toggle('hidden', !logged);
       if (logged) {
         $('who').textContent = 'You are posting anonymously.';
         $('topbar').innerHTML = `<a href="#" id="logout">logout</a>`;
@@ -155,10 +181,59 @@
       const r = await api('GET', '/api/me');
       if (r.ok) {
         const j = await r.json();
-        const s = j.streak > 0 ? ` · <span class="streak">🔥 ${j.streak}-day streak${j.streak_at_risk_today ? ' (don\'t lose it today!)' : ''}</span>` : '';
-        $('topbar').innerHTML = s + ` · <a href="#" id="logout">logout</a>`;
+        const streakTxt = j.streak > 0 ? `<span class="streak">🔥 ${j.streak}-day${j.streak_at_risk_today ? ' (don\'t lose it today!)' : ''}</span> · ` : '';
+        const rankTxt = j.rank ? `#${j.rank}` : '—';
+        $('topbar').innerHTML = `${streakTxt}<span class="pts">⭐ ${j.points} pts</span> · rank ${rankTxt} · <a href="#" id="logout">logout</a>`;
         $('logout').onclick = () => { localStorage.clear(); location.reload(); };
+        renderBadges(j.badges || []);
+        loadChallenges();
+        loadLeaderboard();
       }
+    }
+
+    function renderBadges(badges) {
+      const el = $('badges');
+      if (!el) return;
+      if (!badges.length) { el.innerHTML = '<span class="muted">No badges yet — post your first whisper!</span>'; return; }
+      el.innerHTML = badges.map(b => `<span class="badge">🏅 ${escapeHtml(b.label)}</span>`).join('');
+    }
+
+    async function loadChallenges() {
+      const el = $('challenges');
+      if (!el) return;
+      const r = await api('GET', '/api/challenges');
+      if (!r.ok) return;
+      const j = await r.json();
+      el.innerHTML = j.challenges.map(c => {
+        const pct = Math.round((c.progress / c.goal) * 100);
+        const btn = c.completed && !c.claimed
+          ? `<button class="claimBtn" data-key="${c.key}">Claim +${c.reward}</button>`
+          : c.claimed ? `<span class="muted">✓ claimed</span>` : `<span class="muted">+${c.reward} pts</span>`;
+        return `<div class="chall">
+          <div class="chall-top"><span>${escapeHtml(c.label)}</span>${btn}</div>
+          <div class="bar"><div class="fill" style="width:${pct}%"></div></div>
+          <div class="muted">${c.progress}/${c.goal}</div>
+        </div>`;
+      }).join('');
+      el.querySelectorAll('.claimBtn').forEach(b => {
+        b.onclick = async () => {
+          const rr = await api('POST', `/api/challenges/${b.dataset.key}/claim`);
+          if (rr.ok) loadMe();
+          else { const e = await rr.json(); alert(e.error || 'Could not claim'); }
+        };
+      });
+    }
+
+    async function loadLeaderboard() {
+      const el = $('leaderboard');
+      if (!el) return;
+      const r = await api('GET', '/api/leaderboard');
+      if (!r.ok) return;
+      const j = await r.json();
+      if (!j.leaderboard.length) { el.innerHTML = '<span class="muted">No players yet.</span>'; return; }
+      el.innerHTML = j.leaderboard.map(x =>
+        `<div class="lbrow"><span>${x.rank}. ${escapeHtml(x.alias)}</span><span class="pts">⭐ ${x.points}</span></div>`
+      ).join('');
     }
 
     async function toggleReact(rid, kind, btn) {
@@ -197,18 +272,27 @@
         return;
       }
       for (const x of data.rumors) {
+        const isNew = x.is_new;
         const d = document.createElement('div');
         d.className = 'rumor';
+        const feat = x.featured ? `<span class="featured-badge">✨ Featured</span>` : '';
         const tags = (x.tags || []).map(t => `<span class="tag">#${escapeHtml(t)}</span>`).join('');
-        d.innerHTML = `<div><span class="handle">Anonymous</span></div>
+        const softMeta = (label, n) => (isNew && !n)
+          ? `<span class="soft">${label} · be the first</span>`
+          : `${label} ${n || 0}`;
+        d.innerHTML = `<div><span class="handle">Anonymous</span>${feat}</div>
           <div style="margin-top:6px">${escapeHtml(x.text)}</div>
           ${tags ? `<div class="tags">${tags}</div>` : ''}
-          <div class="meta">${new Date(x.created_at).toLocaleString()} · 💬 ${x.comment_count||0} · 🙋 ${x.me_too_count||0}</div>`;
+          <div class="meta">${new Date(x.created_at).toLocaleString()} · ${softMeta('💬', x.comment_count)} · ${softMeta('🙋', x.me_too_count)}</div>`;
         const rc = document.createElement('div');
         rc.className = 'reactions';
         for (const [k, emoji] of Object.entries(REACTIONS)) {
           const b = document.createElement('button');
-          b.textContent = `${emoji} ${x.reactions ? x.reactions[k] : 0}`;
+          // Rising-star floor: hide the raw 0 on fresh posts so they don't
+          // read as "failed" — just show the emoji until someone reacts.
+          const n = x.reactions ? x.reactions[k] : 0;
+          b.textContent = (isNew && !n) ? `${emoji}` : `${emoji} ${n}`;
+          if (isNew && !n) b.classList.add('soft');
           b.onclick = () => toggleReact(x.id, k, b);
           rc.appendChild(b);
         }
