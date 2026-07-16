@@ -192,6 +192,24 @@ def create_app(config=None):
         )
         return resp
 
+    # Ensure schema exists on startup. Render runs `gunicorn "app:create_app()"`
+    # (create_app is called directly, not run.py), so we must init the DB here
+    # — otherwise tables are never created and every API call 500s.
+    # Tolerate a temporarily-unavailable DB at import time: log and continue
+    # rather than crashing the whole app; per-request calls will surface errors.
+    try:
+        with app.app_context():
+            init_db()
+            if app.config.get("DATABASE_URL"):
+                app.logger.info("Campus Whispers: using Postgres (DATABASE_URL set)")
+            else:
+                app.logger.warning(
+                    "Campus Whispers: DATABASE_URL not set — using SQLite. "
+                    "On Render this is EPHEMERAL and data will be lost on restart."
+                )
+    except Exception as exc:  # pragma: no cover - defensive startup guard
+        app.logger.error("Campus Whispers: DB init failed at startup: %s", exc)
+
     return app
 
 
