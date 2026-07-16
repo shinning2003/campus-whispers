@@ -242,7 +242,25 @@ def get_db(db_path=None):
         try:
             import psycopg
             from psycopg.rows import dict_row
-            conn = psycopg.connect(url, row_factory=dict_row)
+            # Force IPv4: some hosts (Supabase) resolve to an IPv6 address
+            # that Render/other platforms can't route to, causing
+            # "Network is unreachable". Pre-resolve to an A record and pin it.
+            import socket
+            from urllib.parse import urlparse
+            parsed = urlparse(url)
+            host = parsed.hostname
+            if host and not _looks_like_ip(host):
+                try:
+                    ipv4 = socket.getaddrinfo(host, None, socket.AF_INET)[0][4][0]
+                    # psycopg accepts hostaddr to bypass DNS family selection
+                    url = url.replace(f"//{parsed.username}@", f"//{parsed.username}@", 1)
+                    conn = psycopg.connect(url, row_factory=dict_row,
+                                           hostaddr=ipv4,
+                                           connect_timeout=10)
+                    return conn
+                except Exception:
+                    pass  # fall back to normal connect if resolve fails
+            conn = psycopg.connect(url, row_factory=dict_row, connect_timeout=10)
             return conn
         except ImportError:
             pass  # psycopg not installed -> fall through to sqlite
@@ -253,6 +271,15 @@ def get_db(db_path=None):
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     return conn
+
+
+def _looks_like_ip(host):
+    import socket
+    try:
+        socket.inet_aton(host)
+        return True
+    except OSError:
+        return False
 
 
 def exec(conn, sql, params=()):
