@@ -112,9 +112,9 @@
     </div>
 
     <div class="controls">
-      <button id="sortNew" class="active">New</button>
-      <button id="sortHot">Hot</button>
-      <button id="sortRising">Rising</button>
+      <button id="filterAll" class="active">All</button>
+      <button id="filterRumors">rumors</button>
+      <button id="filterExam">exam</button>
     </div>
 
     <div id="feed"></div>
@@ -130,7 +130,7 @@
     });
     const REACTIONS = { laugh:'😂', fire:'🔥', hundred:'💯', shock:'😮' };
 
-    let sortMode = 'new';
+    let filterTag = '';  // '' = all, else 'rumors' or 'exam'
     // Privacy: we only store a boolean "logged in" flag. The handle is NEVER
     // kept in the browser or shown in the UI (it links a person to posts).
     const isLogged = () => localStorage.getItem('cw_logged') === '1';
@@ -189,7 +189,8 @@
     }
 
     async function load() {
-      const r = await api('GET', '/api/rumors?sort=' + sortMode);
+      const url = '/api/rumors' + (filterTag ? '?tag=' + encodeURIComponent(filterTag) : '');
+      const r = await api('GET', url);
       const data = await r.json();
       $('feed').innerHTML = '';
       if (!data.rumors.length) {
@@ -311,13 +312,15 @@
       $('forgotMsg').style.color = r.ok ? '#7cff9c' : '#ff8a8a';
     };
 
-    $('sortNew').onclick = () => { sortMode='new'; setActiveSort(); load(); };
-    $('sortHot').onclick = () => { sortMode='hot'; setActiveSort(); load(); };
-    $('sortRising').onclick = () => { sortMode='rising'; setActiveSort(); load(); };
-    function setActiveSort() {
-      ['New','Hot','Rising'].forEach(s => $(`sort${s}`).classList.remove('active'));
-      $(`sort${sortMode.charAt(0).toUpperCase()+sortMode.slice(1)}`).classList.add('active');
-    }
+    const FILTERS = { filterAll:'', filterRumors:'rumors', filterExam:'exam' };
+    Object.keys(FILTERS).forEach(id => {
+      $(id).onclick = () => {
+        filterTag = FILTERS[id];
+        Object.keys(FILTERS).forEach(x => $(x).classList.remove('active'));
+        $(id).classList.add('active');
+        load();
+      };
+    });
 
     showState();
     load();
