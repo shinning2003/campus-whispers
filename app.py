@@ -613,6 +613,21 @@ def create_app(config=None):
     def index():
         return serve_page("index.html")
 
+    # TEMP DIAGNOSTIC
+    @app.get("/api/_dbg")
+    def _dbg():
+        import sqlite3 as _sq
+        conn = get_db()
+        is_sqlite = isinstance(conn, _sq.Connection)
+        conn.close()
+        url = app.config.get("DATABASE_URL") or ""
+        # safe: show only host, not password
+        from urllib.parse import urlparse
+        host = urlparse(url).hostname if url else None
+        return jsonify({"backend": "sqlite" if is_sqlite else "postgres",
+                        "db_url_host": host,
+                        "db_url_set": bool(url)})
+
     @app.get("/admin")
     def admin_page():
         return serve_page("admin.html")
