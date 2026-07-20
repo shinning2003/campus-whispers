@@ -82,20 +82,20 @@
   <main class="wrap">
     <div class="topbar" id="topbar"></div>
 
-    <!-- Register (no handle field — auto-assigned for privacy) -->
+    <!-- Register (handle = your username; email login removed) -->
     <div class="card" id="registerCard">
       <strong>First time? Create your account</strong>
       <input id="real_name" placeholder="Real name (admin only sees this)" />
-      <input id="email" placeholder="Email" />
+      <input id="reg_handle" placeholder="Handle (username, 3-20 chars)" />
       <input id="reg_pw" type="password" placeholder="Password" />
       <button id="register">Register</button>
       <div class="msg" id="regMsg"></div>
     </div>
 
-    <!-- Login (by email only) -->
+    <!-- Login (by handle + password only) -->
     <div class="card hidden" id="loginCard">
       <strong>Log in to post</strong>
-      <input id="identifier" placeholder="Email" />
+      <input id="login_handle" placeholder="Handle (username)" />
       <input id="login_pw" type="password" placeholder="Password" />
       <button id="login">Login</button>
       <div class="msg" id="loginMsg"></div>
@@ -105,8 +105,8 @@
     <!-- Forgot password -->
     <div class="card hidden" id="forgotCard">
       <strong>Reset password</strong>
-      <p class="msg">Enter your email. The admin will reset your password manually.</p>
-      <input id="forgot_email" placeholder="Email" />
+      <p class="msg">Enter your handle. The admin will reset your password manually.</p>
+      <input id="forgot_handle" placeholder="Handle" />
       <button id="forgotSubmit">Request reset</button>
       <div class="msg" id="forgotMsg"></div>
       <button class="linkbtn" id="backLink">Back to login</button>
@@ -337,9 +337,8 @@
     $('register').onclick = async () => {
       const r = await api('POST', '/api/register', {
         real_name: $('real_name').value.trim(),
-        email: $('email').value.trim(),
+        handle: $('reg_handle').value.trim(),
         password: $('reg_pw').value
-        // handle is intentionally NOT sent -> auto-generated server-side
       });
       const j = await r.json();
       if (r.ok) { $('regMsg').textContent = 'Registered! Now log in.'; $('regMsg').style.color = '#7cff9c'; }
@@ -348,7 +347,7 @@
 
     $('login').onclick = async () => {
       const r = await api('POST', '/api/login', {
-        identifier: $('identifier').value.trim(),
+        handle: $('login_handle').value.trim(),
         password: $('login_pw').value
       });
       const j = await r.json();
@@ -388,7 +387,7 @@
       $('loginCard').classList.remove('hidden');
     };
     $('forgotSubmit').onclick = async () => {
-      const r = await api('POST', '/api/forgot-password', { email: $('forgot_email').value.trim() });
+      const r = await api('POST', '/api/forgot-password', { handle: $('forgot_handle').value.trim() });
       const j = await r.json();
       $('forgotMsg').textContent = j.message || j.error;
       $('forgotMsg').style.color = r.ok ? '#7cff9c' : '#ff8a8a';

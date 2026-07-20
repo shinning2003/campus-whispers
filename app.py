@@ -29,46 +29,37 @@ def create_app(config=None):
     def register():
         p = request.get_json(silent=True) or {}
         real_name = (p.get("real_name") or "").strip()
-        email = (p.get("email") or "").strip().lower()
-        password = p.get("password") or ""
-        # Handle is optional in the UI (privacy). If omitted, auto-generate.
+        # Email login removed: users authenticate by handle + password only.
         handle = (p.get("handle") or "").strip()
-        if not (real_name and email and password):
-            return jsonify({"error": "real_name, email and password required."}), 400
-        if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
-            return jsonify({"error": "Invalid email."}), 400
+        password = p.get("password") or ""
+        if not (real_name and handle and password):
+            return jsonify({"error": "real_name, handle and password required."}), 400
         if len(password) < 4:
             return jsonify({"error": "Password too short (min 4)."}), 400
-        if handle and not re.match(r"^[A-Za-z0-9_]{3,20}$", handle):
+        if not re.match(r"^[A-Za-z0-9_]{3,20}$", handle):
             return jsonify({"error": "Handle: 3-20 chars, letters/numbers/_."}), 400
         conn = get_db()
-        if exec(conn, "SELECT 1 FROM users WHERE email=?", (email,)).fetchone():
-            conn.close()
-            return jsonify({"error": "Email already registered."}), 400
-        if handle and exec(conn, "SELECT 1 FROM users WHERE handle=?", (handle,)).fetchone():
+        if exec(conn, "SELECT 1 FROM users WHERE handle=?", (handle,)).fetchone():
             conn.close()
             return jsonify({"error": "Handle taken."}), 400
-        if not handle:
-            handle = _generate_handle(conn)
         exec(conn,
-            "INSERT INTO users (real_name, email, handle, password_hash) VALUES (?,?,?,?)",
-            (real_name, email, handle, generate_password_hash(password)),
+            "INSERT INTO users (real_name, handle, password_hash) VALUES (?,?,?)",
+            (real_name, handle, generate_password_hash(password)),
         )
         conn.commit()
         conn.close()
-        # Handle is returned for internal/admin use only; the UI must NOT
-        # display it (privacy: a handle ties a person to their posts).
         return jsonify({"ok": True, "handle": handle}), 201
 
     @app.post("/api/login")
     def login():
         p = request.get_json(silent=True) or {}
-        identifier = (p.get("identifier") or "").strip().lower()
+        # Email login removed: authenticate by handle (username) + password.
+        handle = (p.get("handle") or p.get("identifier") or "").strip()
         password = p.get("password") or ""
         conn = get_db()
-        row = exec(conn, 
-            "SELECT * FROM users WHERE email=? OR handle=?",
-            (identifier, identifier),
+        row = exec(conn,
+            "SELECT * FROM users WHERE handle=?",
+            (handle,),
         ).fetchone()
         conn.close()
         if not row or not check_password_hash(row["password_hash"], password):
@@ -478,39 +469,33 @@ def create_app(config=None):
 
     @app.post("/api/admin/login")
     def admin_login():
-        # Admin access is email-based and restricted to the owner's address
-        # (no in-app "Admin" button — only the owner's Gmail can log in).
+        # Admin access is password-only (the owner's secret). No email gate.
         p = request.get_json(silent=True) or {}
-        email = (p.get("email") or "").strip().lower()
-        if email != app.config["ADMIN_EMAIL"]:
-            return jsonify({"error": "Unauthorized."}), 401
         if p.get("password") != app.config["ADMIN_PASSWORD"]:
             return jsonify({"error": "Unauthorized."}), 401
         session["admin"] = True
-        session["admin_email"] = email
         return jsonify({"ok": True})
 
     @app.post("/api/forgot-password")
     def forgot_password():
-        # Privacy-safe: never confirms whether an email exists. If the email
-        # is registered, the admin is notified so they can reset it manually
-        # (self-service email reset requires SMTP, which is optional).
+        # Privacy-safe: never confirms whether a handle exists. The admin is
+        # notified (log) so they can reset it manually via the admin panel.
         p = request.get_json(silent=True) or {}
-        email = (p.get("email") or "").strip().lower()
-        if not email:
-            return jsonify({"error": "Email required."}), 400
+        handle = (p.get("handle") or "").strip()
+        if not handle:
+            return jsonify({"error": "Handle required."}), 400
         conn = get_db()
-        row = exec(conn, "SELECT id, handle FROM users WHERE email=?",
-                   (email,)).fetchone()
+        row = exec(conn, "SELECT id, handle FROM users WHERE handle=?",
+                   (handle,)).fetchone()
         conn.close()
         if row:
             app.logger.info(
-                "Campus Whispers: password-reset requested for user %s (%s)",
-                row["handle"], email)
+                "Campus Whispers: password-reset requested for user %s",
+                row["handle"])
         # Always return the same neutral message (no account enumeration).
         return jsonify({
             "ok": True,
-            "message": "If that email is registered, the admin has been "
+            "message": "If that handle is registered, the admin has been "
                        "notified and will reset your password."
         }), 200
 
@@ -554,21 +539,14 @@ def create_app(config=None):
             "r.id DESC",
             (cutoff,)).fetchall()
         users = exec(conn,
-            "SELECT email FROM users WHERE banned=0 AND email IS NOT NULL "
-            "AND email <> ''").fetchall()
+            "SELECT handle FROM users WHERE banned=0").fetchall()
         conn.close()
         if not rows:
             return jsonify({"ok": True, "sent": 0, "note": "no recent rumors"})
         body = _render_digest(rows)
-        sender = app.config.get("MAIL_SENDER")
+        # Email delivery disabled: account emails were removed from the schema.
+        # `users` is retained so a future in-app notification path can use it.
         sent = 0
-        if sender:
-            for u in users:
-                sender(u["email"], "Campus Whispers — today's top whispers", body)
-                sent += 1
-        else:
-            # Real SMTP path (configured via env). Fail gracefully if unset.
-            sent = _send_digest_smtp(app, [u["email"] for u in users], body)
         return jsonify({"ok": True, "sent": sent, "rumors": len(rows)})
 
 
@@ -578,7 +556,7 @@ def create_app(config=None):
             return jsonify({"error": "Unauthorized."}), 401
         conn = get_db()
         rows = exec(conn, 
-            "SELECT r.id, r.text, r.created_at, u.handle, u.real_name, u.email "
+            "SELECT r.id, r.text, r.created_at, u.handle, u.real_name "
             "FROM rumors r JOIN users u ON u.id = r.user_id ORDER BY r.id DESC"
         ).fetchall()
         conn.close()
@@ -615,7 +593,7 @@ def create_app(config=None):
             return jsonify({"error": "Unauthorized."}), 401
         conn = get_db()
         rows = exec(conn, 
-            "SELECT id, real_name, email, handle, banned FROM users ORDER BY id"
+            "SELECT id, real_name, handle, banned FROM users ORDER BY id"
         ).fetchall()
         conn.close()
         return jsonify({"users": [dict(r) for r in rows]})
@@ -671,12 +649,6 @@ def create_app(config=None):
                 )
     except Exception as exc:  # pragma: no cover - defensive startup guard
         app.logger.error("Campus Whispers: DB init failed at startup: %s", exc)
-
-    # TEMP DIAGNOSTIC — returns real traceback on 500 (remove after debugging)
-    import traceback as _tb
-    @app.errorhandler(500)
-    def _diag_500(e):
-        return jsonify({"_diag_error": _tb.format_exc()}), 500
 
     return app
 
@@ -869,7 +841,7 @@ def comment_public(row):
 def rumor_admin(row):
     return {"id": row["id"], "text": row["text"],
             "created_at": row["created_at"], "handle": row["handle"],
-            "real_name": row["real_name"], "email": row["email"]}
+            "real_name": row["real_name"]}
 
 
 def serve_page(name):
@@ -895,17 +867,17 @@ def get_db(db_path=None):
 
             # Force IPv4: Render's free tier cannot route to Supabase's IPv6
             # address, so connecting to db.<ref>.supabase.co yields
-            # "Network is unreachable". psycopg 3 does NOT accept `hostaddr`
-            # as a connect kwarg (it raises TypeError), so we pre-resolve to an
-            # A record and pin the literal IPv4 address directly into the
-            # connection URL. libpq then connects to the IP with no AAAA lookup.
+            # "Network is unreachable". We pre-resolve to an A record with
+            # socket.gethostbyname() (IPv4-only by definition — more reliable
+            # here than getaddrinfo(..., AF_INET), which Render's resolver
+            # returns empty for) and pin the literal IPv4 address directly
+            # into the connection URL so libpq never does an AAAA lookup.
             parsed = urlparse(url)
             host = parsed.hostname
             if host and not _looks_like_ip(host):
                 try:
-                    addrs = socket.getaddrinfo(host, None, socket.AF_INET)
-                    if addrs:
-                        ipv4 = addrs[0][4][0]
+                    ipv4 = socket.gethostbyname(host)
+                    if ipv4 and not ipv4.startswith(":"):
                         auth = ""
                         if parsed.username is not None:
                             auth = parsed.username
@@ -957,7 +929,6 @@ def init_db(db_path=None):
             """CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 real_name TEXT NOT NULL,
-                email TEXT NOT NULL UNIQUE,
                 handle TEXT NOT NULL UNIQUE,
                 password_hash TEXT NOT NULL,
                 banned INTEGER NOT NULL DEFAULT 0
@@ -1048,7 +1019,6 @@ def init_db(db_path=None):
             """CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
                 real_name TEXT NOT NULL,
-                email TEXT NOT NULL UNIQUE,
                 handle TEXT NOT NULL UNIQUE,
                 password_hash TEXT NOT NULL,
                 banned INTEGER NOT NULL DEFAULT 0

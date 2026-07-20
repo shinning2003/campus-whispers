@@ -43,7 +43,7 @@
 <body>
   <header>
     <h1>Campus Whispers — Admin</h1>
-    <div class="sub">You see real names & emails. Ban anyone who misbehaves.</div>
+    <div class="sub">You see real names & handles. Ban anyone who misbehaves.</div>
   </header>
   <main class="wrap">
     <div class="card" id="loginCard">
@@ -88,7 +88,7 @@
         d.innerHTML = `<div class="body">
           <div>${esc(x.text)}</div>
           <div class="meta">#${x.id} · <span class="handle">@${esc(x.handle)}</span> ·
-            <span class="id">${esc(x.real_name)} &lt;${esc(x.email)}&gt;</span> ·
+            <span class="id">${esc(x.real_name)}</span> ·
             ${new Date(x.created_at).toLocaleString()}</div></div>`;
         const b=document.createElement('button'); b.className='del'; b.textContent='Delete';
         b.onclick=async()=>{ await api('DELETE','/api/admin/rumors/'+x.id); loadRumors(); };
@@ -105,7 +105,7 @@
         const d=document.createElement('div'); d.className='rumor';
         d.innerHTML=`<div class="body"><div><span class="handle">@${esc(u.handle)}</span>
           ${u.banned?'<span class="id">[BANNED]</span>':''}</div>
-          <div class="meta"><span class="id">${esc(u.real_name)} &lt;${esc(u.email)}&gt;</span></div></div>`;
+          <div class="meta"><span class="id">${esc(u.real_name)}</span></div></div>`;
         if (!u.banned) {
           const b=document.createElement('button'); b.className='ban'; b.textContent='Ban & remove';
           b.onclick=async()=>{ if(confirm('Ban '+u.real_name+'? All their posts will be deleted.')){ await api('DELETE','/api/admin/users/'+u.id); loadUsers(); loadRumors(); } };
