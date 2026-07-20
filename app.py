@@ -672,6 +672,12 @@ def create_app(config=None):
     except Exception as exc:  # pragma: no cover - defensive startup guard
         app.logger.error("Campus Whispers: DB init failed at startup: %s", exc)
 
+    # TEMP DIAGNOSTIC — returns real traceback on 500 (remove after debugging)
+    import traceback as _tb
+    @app.errorhandler(500)
+    def _diag_500(e):
+        return jsonify({"_diag_error": _tb.format_exc()}), 500
+
     return app
 
 
