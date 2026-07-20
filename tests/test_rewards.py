@@ -13,7 +13,10 @@ Research grounding (see engagement-feature-design skill):
   rising-star floor so new posts never publicly read as '0 = failure'.
 """
 import pytest
+from app import create_app
 from tests.helpers import register_and_login
+
+ADMIN_EMAIL = create_app().config["ADMIN_EMAIL"]
 
 
 def _login_fresh(client, handle, email):
@@ -153,7 +156,7 @@ def test_post_can_be_featured_flag_present(client):
 def test_admin_can_feature_a_post(client):
     register_and_login(client, handle="feat2", email="feat2@x.com")
     rid = _post(client, "feature me")
-    client.post("/api/admin/login", json={"password": "admin123"})
+    client.post("/api/admin/login", json={"email": ADMIN_EMAIL, "password": "admin123"})
     r = client.post(f"/api/admin/rumors/{rid}/feature")
     assert r.status_code == 200
     feed = client.get("/api/rumors").get_json()["rumors"]

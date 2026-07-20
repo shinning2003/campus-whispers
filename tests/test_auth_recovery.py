@@ -6,6 +6,9 @@ The handle still exists in the DB + admin view for accountability.
 Password recovery is admin-reset (no user email enumeration).
 """
 import pytest
+from app import create_app
+
+ADMIN_EMAIL = create_app().config["ADMIN_EMAIL"]
 from tests.helpers import register_and_login
 
 
@@ -48,7 +51,7 @@ def test_admin_can_reset_password(client):
     login = client.post("/api/login",
                         json={"identifier": "reset@x.com", "password": "oldpw"})
     assert login.status_code == 200
-    client.post("/api/admin/login", json={"password": "admin123"})
+    client.post("/api/admin/login", json={"email": ADMIN_EMAIL, "password": "admin123"})
     users = client.get("/api/admin/users").get_json()["users"]
     uid = [u for u in users if u["email"] == "reset@x.com"][0]["id"]
     res = client.post(f"/api/admin/users/{uid}/reset-password",
@@ -66,7 +69,7 @@ def test_admin_can_reset_password(client):
 def test_reset_password_requires_admin(client):
     _register_no_handle(client, email="r2@x.com")
     # fetch uid as admin, then attempt reset without admin session
-    client.post("/api/admin/login", json={"password": "admin123"})
+    client.post("/api/admin/login", json={"email": ADMIN_EMAIL, "password": "admin123"})
     users = client.get("/api/admin/users").get_json()["users"]
     uid = [u for u in users if u["email"] == "r2@x.com"][0]["id"]
     # clear admin session by using a fresh anonymous client

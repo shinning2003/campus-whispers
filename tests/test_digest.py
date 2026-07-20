@@ -6,7 +6,10 @@ registration, so no new friction. Sending is admin-gated and injectable for
 testing (no real SMTP needed in tests).
 """
 import pytest
+from app import create_app
 from tests.helpers import register_and_login
+
+ADMIN_EMAIL = create_app().config["ADMIN_EMAIL"]
 
 
 def _post(client, handle, email, text):
@@ -25,7 +28,7 @@ def test_digest_sends_top_rumors_to_users(client, app=None):
     _post(client, "aaa", "winner@x.com", "top secret of the day")
     _post(client, "bbb", "reader@x.com", "another whisper")
     sent = []
-    client.post("/api/admin/login", json={"password": "admin123"})
+    client.post("/api/admin/login", json={"email": ADMIN_EMAIL, "password": "admin123"})
     r = client.post("/api/admin/digest/send",
                     json={},
                     # injector handled via app config below
@@ -51,7 +54,7 @@ def test_digest_injects_sender_and_reports_counts(client):
     _post(client, "bbb", "reader@x.com", "another whisper")
     # give the first one engagement so it ranks
     client.post("/api/rumors/1/react", json={"kind": "fire"})
-    client.post("/api/admin/login", json={"password": "admin123"})
+    client.post("/api/admin/login", json={"email": ADMIN_EMAIL, "password": "admin123"})
     r = client.post("/api/admin/digest/send", json={})
     assert r.status_code == 200
     j = r.get_json()
@@ -71,7 +74,7 @@ def test_digest_only_includes_recent_rumors(client):
     app = client.application
     app.config["MAIL_SENDER"] = fake_send
     _post(client, "aaa", "winner@x.com", "today's hot take")
-    client.post("/api/admin/login", json={"password": "admin123"})
+    client.post("/api/admin/login", json={"email": ADMIN_EMAIL, "password": "admin123"})
     # window of 1 day (default) -> includes the just-posted rumor
     r = client.post("/api/admin/digest/send", json={"window_hours": 24})
     assert r.status_code == 200

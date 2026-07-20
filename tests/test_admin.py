@@ -4,7 +4,18 @@ from tests.helpers import register_and_login
 
 
 def _login_admin(client, password):
-    return client.post("/api/admin/login", json={"password": password})
+    # Admin is email-based; use the configured owner address.
+    from app import create_app
+    email = create_app().config["ADMIN_EMAIL"]
+    return client.post("/api/admin/login", json={"email": email, "password": password})
+
+
+def test_admin_login_rejects_non_owner_email(client):
+    # Only the owner's Gmail may obtain an admin session.
+    r = client.post("/api/admin/login",
+                    json={"email": "someoneelse@x.com", "password": "admin123"})
+    assert r.status_code == 401
+    assert client.get("/api/admin/rumors").status_code == 401
 
 
 def test_admin_dashboard_requires_login(client):

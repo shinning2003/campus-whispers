@@ -5,7 +5,10 @@ odds of another hook pass) + Tribe (peer interaction). Comments are anonymous
 like rumors — handle shown, real identity hidden.
 """
 import pytest
+from app import create_app
 from tests.helpers import register_and_login
+
+ADMIN_EMAIL = create_app().config["ADMIN_EMAIL"]
 
 
 def _post(client, handle, email, text):
@@ -68,7 +71,7 @@ def test_banned_user_comments_hidden(client):
     register_and_login(client, handle="bbb", email="b@x.com")
     client.post(f"/api/rumors/{rid}/comments", json={"text": "spam"})
     # admin bans bbb -> their comment must disappear
-    client.post("/api/admin/login", json={"password": "admin123"})
+    client.post("/api/admin/login", json={"email": ADMIN_EMAIL, "password": "admin123"})
     users = client.get("/api/admin/users").get_json()["users"]
     bbb = [u for u in users if u["handle"] == "bbb"][0]
     client.delete(f"/api/admin/users/{bbb['id']}")

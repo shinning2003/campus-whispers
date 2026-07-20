@@ -19,6 +19,7 @@ def create_app(config=None):
         DB_PATH=os.environ.get("DB_PATH", "campus_whispers.db"),
         DATABASE_URL=os.environ.get("DATABASE_URL"),
         ADMIN_PASSWORD=os.environ.get("ADMIN_PASSWORD", "admin123"),
+        ADMIN_EMAIL=os.environ.get("ADMIN_EMAIL", "11surendiran2003@gmail.com"),
         SECRET_KEY=os.environ.get("SECRET_KEY", "dev-secret-change-me"),
     )
     if config:
@@ -477,10 +478,16 @@ def create_app(config=None):
 
     @app.post("/api/admin/login")
     def admin_login():
+        # Admin access is email-based and restricted to the owner's address
+        # (no in-app "Admin" button — only the owner's Gmail can log in).
         p = request.get_json(silent=True) or {}
+        email = (p.get("email") or "").strip().lower()
+        if email != app.config["ADMIN_EMAIL"]:
+            return jsonify({"error": "Unauthorized."}), 401
         if p.get("password") != app.config["ADMIN_PASSWORD"]:
             return jsonify({"error": "Unauthorized."}), 401
         session["admin"] = True
+        session["admin_email"] = email
         return jsonify({"ok": True})
 
     @app.post("/api/forgot-password")
