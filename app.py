@@ -934,6 +934,11 @@ def init_db(db_path=None):
                 banned INTEGER NOT NULL DEFAULT 0
             )"""
         )
+        # Self-heal: drop the removed email column from any pre-existing DB.
+        try:
+            conn.execute("ALTER TABLE users DROP COLUMN email")
+        except Exception:
+            pass  # column already gone (or SQLite < 3.35)
         conn.execute(
             """CREATE TABLE IF NOT EXISTS rumors (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1024,6 +1029,11 @@ def init_db(db_path=None):
                 banned INTEGER NOT NULL DEFAULT 0
             )"""
         )
+        # Self-heal: drop the removed email column if it still exists.
+        try:
+            conn.execute("ALTER TABLE users DROP COLUMN IF EXISTS email")
+        except Exception:
+            pass
         conn.execute(
             """CREATE TABLE IF NOT EXISTS rumors (
                 id SERIAL PRIMARY KEY,
