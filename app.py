@@ -29,19 +29,20 @@ def create_app(config=None):
     def register():
         p = request.get_json(silent=True) or {}
         real_name = (p.get("real_name") or "").strip()
-        # Email login removed: users authenticate by handle + password only.
-        handle = (p.get("handle") or "").strip()
         password = p.get("password") or ""
-        if not (real_name and handle and password):
-            return jsonify({"error": "real_name, handle and password required."}), 400
+        if not (real_name and password):
+            return jsonify({"error": "Name and password required."}), 400
         if len(password) < 4:
             return jsonify({"error": "Password too short (min 4)."}), 400
-        if not re.match(r"^[A-Za-z0-9_]{3,20}$", handle):
-            return jsonify({"error": "Handle: 3-20 chars, letters/numbers/_."}), 400
+        # Generate a handle from the name (lowercase, alphanumeric + underscore)
+        base_handle = re.sub(r'[^A-Za-z0-9_]', '_', real_name.lower())[:20]
+        handle = base_handle
         conn = get_db()
-        if exec(conn, "SELECT 1 FROM users WHERE handle=?", (handle,)).fetchone():
-            conn.close()
-            return jsonify({"error": "Handle taken."}), 400
+        # Ensure unique handle
+        i = 2
+        while exec(conn, "SELECT 1 FROM users WHERE handle=?", (handle,)).fetchone():
+            handle = f"{base_handle}{i}"
+            i += 1
         exec(conn,
             "INSERT INTO users (real_name, handle, password_hash) VALUES (?,?,?)",
             (real_name, handle, generate_password_hash(password)),
@@ -53,13 +54,13 @@ def create_app(config=None):
     @app.post("/api/login")
     def login():
         p = request.get_json(silent=True) or {}
-        # Email login removed: authenticate by handle (username) + password.
-        handle = (p.get("handle") or p.get("identifier") or "").strip()
+        # Authenticate by name + password
+        real_name = (p.get("real_name") or p.get("name") or "").strip()
         password = p.get("password") or ""
         conn = get_db()
         row = exec(conn,
-            "SELECT * FROM users WHERE handle=?",
-            (handle,),
+            "SELECT * FROM users WHERE real_name=?",
+            (real_name,),
         ).fetchone()
         conn.close()
         if not row or not check_password_hash(row["password_hash"], password):
