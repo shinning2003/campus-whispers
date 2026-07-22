@@ -29,23 +29,27 @@ def create_app(config=None):
     def register():
         p = request.get_json(silent=True) or {}
         real_name = (p.get("real_name") or "").strip()
+        email = (p.get("email") or "").strip().lower()
+        handle = (p.get("handle") or "").strip()
         password = p.get("password") or ""
-        if not (real_name and password):
-            return jsonify({"error": "Name and password required."}), 400
+        if not (real_name and email and handle and password):
+            return jsonify({"error": "real_name, email, handle and password required."}), 400
         if len(password) < 4:
             return jsonify({"error": "Password too short (min 4)."}), 400
-        # Generate a handle from the name (lowercase, alphanumeric + underscore)
-        base_handle = re.sub(r'[^A-Za-z0-9_]', '_', real_name.lower())[:20]
-        handle = base_handle
+        if not re.match(r"^[A-Za-z0-9_]{3,20}$", handle):
+            return jsonify({"error": "Handle: 3-20 chars, letters/numbers/_."}), 400
+        if not re.match(r"^[^@]+@[^@]+\.[^@]+$", email):
+            return jsonify({"error": "Invalid email format."}), 400
         conn = get_db()
-        # Ensure unique handle
-        i = 2
-        while exec(conn, "SELECT 1 FROM users WHERE handle=?", (handle,)).fetchone():
-            handle = f"{base_handle}{i}"
-            i += 1
+        if exec(conn, "SELECT 1 FROM users WHERE handle=?", (handle,)).fetchone():
+            conn.close()
+            return jsonify({"error": "Handle taken."}), 400
+        if exec(conn, "SELECT 1 FROM users WHERE email=?", (email,)).fetchone():
+            conn.close()
+            return jsonify({"error": "Email already registered."}), 400
         exec(conn,
-            "INSERT INTO users (real_name, handle, password_hash) VALUES (?,?,?)",
-            (real_name, handle, generate_password_hash(password)),
+            "INSERT INTO users (real_name, email, handle, password_hash) VALUES (?,?,?,?)",
+            (real_name, email, handle, generate_password_hash(password)),
         )
         conn.commit()
         conn.close()
@@ -54,14 +58,23 @@ def create_app(config=None):
     @app.post("/api/login")
     def login():
         p = request.get_json(silent=True) or {}
-        # Authenticate by name + password
-        real_name = (p.get("real_name") or p.get("name") or "").strip()
+        # Accept either email or handle as identifier
+        identifier = (p.get("identifier") or p.get("handle") or p.get("email") or "").strip().lower()
         password = p.get("password") or ""
+        if not identifier or not password:
+            return jsonify({"error": "Identifier (email or handle) and password required."}), 400
         conn = get_db()
-        row = exec(conn,
-            "SELECT * FROM users WHERE real_name=?",
-            (real_name,),
-        ).fetchone()
+        # Check if identifier looks like an email
+        if "@" in identifier:
+            row = exec(conn,
+                "SELECT * FROM users WHERE email=?",
+                (identifier,),
+            ).fetchone()
+        else:
+            row = exec(conn,
+                "SELECT * FROM users WHERE handle=?",
+                (identifier,),
+            ).fetchone()
         conn.close()
         if not row or not check_password_hash(row["password_hash"], password):
             return jsonify({"error": "Invalid credentials."}), 401
@@ -522,33 +535,41 @@ def create_app(config=None):
 
     @app.post("/api/admin/digest/send")
     def admin_digest_send():
-        if not session.get("admin"):
-            return jsonify({"error": "Unauthorized."}), 401
-        p = request.get_json(silent=True) or {}
-        window_hours = int(p.get("window_hours") or 24)
-        conn = get_db()
-        cutoff = (datetime.now(timezone.utc)
-                  - timedelta(hours=window_hours)).isoformat()
-        rows = exec(conn,
-            "SELECT r.id, r.text, r.created_at, u.handle "
-            "FROM rumors r JOIN users u ON u.id = r.user_id "
-            "WHERE u.banned = 0 AND r.created_at >= ? "
-            "ORDER BY (SELECT COUNT(*) FROM reactions WHERE rumor_id=r.id) "
-            "+ (SELECT COUNT(*) FROM me_too WHERE rumor_id=r.id)*2 "
-            "+ (SELECT COUNT(*) FROM comments c JOIN users cu "
-            "ON cu.id=c.user_id WHERE c.rumor_id=r.id AND cu.banned=0)*3 DESC, "
-            "r.id DESC",
-            (cutoff,)).fetchall()
-        users = exec(conn,
-            "SELECT handle FROM users WHERE banned=0").fetchall()
-        conn.close()
-        if not rows:
-            return jsonify({"ok": True, "sent": 0, "note": "no recent rumors"})
-        body = _render_digest(rows)
-        # Email delivery disabled: account emails were removed from the schema.
-        # `users` is retained so a future in-app notification path can use it.
-        sent = 0
-        return jsonify({"ok": True, "sent": sent, "rumors": len(rows)})
+            if not session.get("admin"):
+                return jsonify({"error": "Unauthorized."}), 401
+            p = request.get_json(silent=True) or {}
+            window_hours = int(p.get("window_hours") or 24)
+            conn = get_db()
+            cutoff = (datetime.now(timezone.utc)
+                      - timedelta(hours=window_hours)).isoformat()
+            rows = exec(conn,
+                "SELECT r.id, r.text, r.created_at, u.handle "
+                "FROM rumors r JOIN users u ON u.id = r.user_id "
+                "WHERE u.banned = 0 AND r.created_at >= ? "
+                "ORDER BY (SELECT COUNT(*) FROM reactions WHERE rumor_id=r.id) "
+                "+ (SELECT COUNT(*) FROM me_too WHERE rumor_id=r.id)*2 "
+                "+ (SELECT COUNT(*) FROM comments c JOIN users cu "
+                "ON cu.id=c.user_id WHERE c.rumor_id=r.id AND cu.banned=0)*3 DESC, "
+                "r.id DESC",
+                (cutoff,)).fetchall()
+            # Get emails of all non-banned users for digest delivery
+            user_emails = exec(conn,
+                "SELECT email FROM users WHERE banned=0").fetchall()
+            conn.close()
+            if not rows:
+                return jsonify({"ok": True, "sent": 0, "note": "no recent rumors"})
+            body = _render_digest(rows)
+            # Extract email addresses
+            to_addrs = [u["email"] for u in user_emails]
+            # Allow test injection of a fake sender via app.config["MAIL_SENDER"]
+            mailer = app.config.get("MAIL_SENDER")
+            if mailer:
+                for to in to_addrs:
+                    mailer(to, "Campus Whispers — today's top whispers", body)
+                sent = len(to_addrs)
+            else:
+                sent = _send_digest_smtp(app, to_addrs, body)
+            return jsonify({"ok": True, "sent": sent, "rumors": len(rows)})
 
 
     @app.get("/api/admin/rumors")
@@ -594,7 +615,7 @@ def create_app(config=None):
             return jsonify({"error": "Unauthorized."}), 401
         conn = get_db()
         rows = exec(conn, 
-            "SELECT id, real_name, handle, banned FROM users ORDER BY id"
+            "SELECT id, real_name, email, handle, banned FROM users ORDER BY id"
         ).fetchall()
         conn.close()
         return jsonify({"users": [dict(r) for r in rows]})
@@ -838,7 +859,6 @@ def comment_public(row):
             "created_at": row["created_at"], "handle": row["handle"]}
 
 
-
 def rumor_admin(row):
     return {"id": row["id"], "text": row["text"],
             "created_at": row["created_at"], "handle": row["handle"],
@@ -930,16 +950,12 @@ def init_db(db_path=None):
             """CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 real_name TEXT NOT NULL,
+                email TEXT NOT NULL UNIQUE,
                 handle TEXT NOT NULL UNIQUE,
                 password_hash TEXT NOT NULL,
                 banned INTEGER NOT NULL DEFAULT 0
             )"""
         )
-        # Self-heal: drop the removed email column from any pre-existing DB.
-        try:
-            conn.execute("ALTER TABLE users DROP COLUMN email")
-        except Exception:
-            pass  # column already gone (or SQLite < 3.35)
         conn.execute(
             """CREATE TABLE IF NOT EXISTS rumors (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1025,14 +1041,15 @@ def init_db(db_path=None):
             """CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
                 real_name TEXT NOT NULL,
+                email TEXT NOT NULL UNIQUE,
                 handle TEXT NOT NULL UNIQUE,
                 password_hash TEXT NOT NULL,
                 banned INTEGER NOT NULL DEFAULT 0
             )"""
         )
-        # Self-heal: drop the removed email column if it still exists.
+        # Self-heal: add email column if it's missing.
         try:
-            conn.execute("ALTER TABLE users DROP COLUMN IF EXISTS email")
+            conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT UNIQUE")
         except Exception:
             pass
         conn.execute(

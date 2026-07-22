@@ -90,10 +90,29 @@
           <div class="msg" id="regMsg"></div>
         </div>
 
+<<<<<<< HEAD
         <!-- Login (name + password only) -->
         <div class="card hidden" id="loginCard">
           <strong>Log in to post</strong>
           <input id="login_name" placeholder="Name" />
+=======
+    <!-- Register (handle = your username; email login added) -->
+    <!-- Register (handle = your username; email + password for login) -->
+        <div class="card" id="registerCard">
+          <strong>First time? Create your account</strong>
+          <input id="real_name" placeholder="Real name (admin only sees this)" />
+          <input id="reg_email" type="email" placeholder="Email (for login)" />
+          <input id="reg_handle" placeholder="Handle (username, 3-20 chars)" />
+          <input id="reg_pw" type="password" placeholder="Password" />
+          <button id="register">Register</button>
+          <div class="msg" id="regMsg"></div>
+        </div>
+
+        <!-- Login (by email OR handle + password) -->
+        <div class="card hidden" id="loginCard">
+          <strong>Log in to post</strong>
+          <input id="login_identifier" placeholder="Email or Handle" />
+>>>>>>> dd20526 (Add email-based registration and login)
           <input id="login_pw" type="password" placeholder="Password" />
           <button id="login">Login</button>
           <div class="msg" id="loginMsg"></div>
@@ -333,6 +352,7 @@
     }
 
     $('register').onclick = async () => {
+<<<<<<< HEAD
           const r = await api('POST', '/api/register', {
             real_name: $('real_name').value.trim(),
             password: $('reg_pw').value
@@ -355,6 +375,32 @@
           }
           else $('loginMsg').textContent = j.error;
         };
+=======
+      const r = await api('POST', '/api/register', {
+        real_name: $('real_name').value.trim(),
+        email: $('reg_email').value.trim().toLowerCase(),
+        handle: $('reg_handle').value.trim(),
+        password: $('reg_pw').value
+      });
+      const j = await r.json();
+      if (r.ok) { $('regMsg').textContent = 'Registered! Now log in.'; $('regMsg').style.color = '#7cff9c'; }
+      else $('regMsg').textContent = j.error;
+    };
+
+    $('login').onclick = async () => {
+      const r = await api('POST', '/api/login', {
+        identifier: $('login_identifier').value.trim(),
+        password: $('login_pw').value
+      });
+      const j = await r.json();
+      if (r.ok) {
+        localStorage.setItem('cw_logged', '1');
+        localStorage.setItem('cw_handle', j.handle);  // kept locally only, never displayed
+        showState(); load(); $('loginMsg').textContent='';
+      }
+      else $('loginMsg').textContent = j.error;
+    };
+>>>>>>> dd20526 (Add email-based registration and login)
 
     // Category tag picker (single-select: rumors default, or exam)
     let selectedTag = 'rumors';

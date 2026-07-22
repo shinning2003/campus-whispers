@@ -4,16 +4,14 @@ from tests.helpers import register_and_login
 
 
 def _login_admin(client, password):
-    # Admin is email-based; use the configured owner address.
-    from app import create_app
-    email = create_app().config["ADMIN_EMAIL"]
-    return client.post("/api/admin/login", json={"email": email, "password": password})
+    # Admin is password-only (the owner's secret).
+    return client.post("/api/admin/login", json={"password": password})
 
 
-def test_admin_login_rejects_non_owner_email(client):
-    # Only the owner's Gmail may obtain an admin session.
+def test_admin_login_rejects_non_owner_password(client):
+    # Only the owner's password may obtain an admin session.
     r = client.post("/api/admin/login",
-                    json={"email": "someoneelse@x.com", "password": "admin123"})
+                    json={"password": "wrongpassword"})
     assert r.status_code == 401
     assert client.get("/api/admin/rumors").status_code == 401
 
@@ -32,8 +30,11 @@ def test_admin_sees_real_identity_and_email(client):
     assert len(data["rumors"]) == 1
     r = data["rumors"][0]
     assert r["real_name"] == "Rahul Kumar"
-    assert r["email"] == "rahul@x.com"
-    assert r["handle"] == "ghost42"
+    # email is in admin/users, not admin/rumors
+    users = client.get("/api/admin/users").get_json()["users"]
+    user = next(u for u in users if u["handle"] == "ghost42")
+    assert user["email"] == "rahul@x.com"
+    assert user["handle"] == "ghost42"
 
 
 def test_admin_can_delete_a_rumor(client):
