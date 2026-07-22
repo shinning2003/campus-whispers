@@ -76,9 +76,10 @@
     .tabs button.active { color:var(--accent); border-bottom-color:var(--accent); background:transparent; }
 
     /* Chat layout: feed scrolls, compose stays pinned at bottom */
-    #chatPanel { display:flex; flex-direction:column; flex:1; min-height:0; }
-    #feed { flex:1; overflow-y:auto; min-height:0; padding:4px 0; }
-    #composeCard { margin:8px 0 0; flex-shrink:0; }
+        #chatPanel { display:flex; flex-direction:column; flex:1; min-height:0; }
+        #feedSection { flex:1; min-height:0; display:flex; flex-direction:column; }
+        #feed { flex:1; overflow-y:auto; min-height:0; padding:4px 0; }
+        #composeCard { margin:8px 0 0; flex-shrink:0; }
 
     @media (max-width: 520px) {
       h1 { font-size: 1.3rem; }
