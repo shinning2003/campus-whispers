@@ -8,11 +8,12 @@
     :root { --bg:#0f1226; --card:#1a1f3d; --accent:#7c5cff; --text:#e8e9f2; --muted:#9aa0c7; }
     * { box-sizing: border-box; }
     body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-           background: var(--bg); color: var(--text); min-height:100vh; display:flex; flex-direction:column; }
-    header { text-align:center; padding: 20px 16px 4px; }
+           background: var(--bg); color: var(--text); height:100vh; overflow:hidden; display:flex; flex-direction:column; }
+    header { text-align:center; padding: 20px 16px 4px; flex-shrink:0; }
     h1 { margin:0; font-size: 1.6rem; }
-    .wrap { max-width: 680px; margin: 0 auto; padding: 0 16px; width:100%; flex:1; display:flex; flex-direction:column; }
+    .wrap { max-width: 680px; margin: 0 auto; padding: 0 16px; width:100%; flex:1; min-height:0; display:flex; flex-direction:column; }
     .card { background: var(--card); border-radius: 14px; padding: 18px; margin: 12px 0; }
+    .foot { text-align:center; color: var(--muted); font-size:.8rem; padding: 16px 16px 24px; flex-shrink:0; }
     input { width:100%; padding: 11px; border-radius: 10px; border:1px solid #2c3361;
             background:#12152e; color: var(--text); font-size:1rem; margin-top:8px; }
     textarea { width:100%; min-height: 80px; resize: vertical; border-radius: 10px;
@@ -75,8 +76,8 @@
     .tabs button.active { color:var(--accent); border-bottom-color:var(--accent); background:transparent; }
 
     /* Chat layout: feed scrolls, compose stays pinned at bottom */
-    #chatPanel { display:flex; flex-direction:column; flex:1; min-height:0; height:calc(100vh - 200px); }
-    #feed { flex:1; overflow-y:auto; padding:4px 0; }
+    #chatPanel { display:flex; flex-direction:column; flex:1; min-height:0; }
+    #feed { flex:1; overflow-y:auto; min-height:0; padding:4px 0; }
     #composeCard { margin:8px 0 0; flex-shrink:0; }
 
     @media (max-width: 520px) {
