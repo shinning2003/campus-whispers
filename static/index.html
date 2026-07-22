@@ -136,13 +136,15 @@
       </details>
     </div>
 
+    <!-- Controls & Feed (hidden when not logged in) -->
+    <div id="feedSection" class="hidden">
     <div class="controls">
       <button id="filterAll" class="active">All</button>
       <button id="filterRumors">rumors</button>
       <button id="filterExam">exam</button>
     </div>
-
     <div id="feed"></div>
+    </div>
   </main>
   <footer class="foot">Whisper Room — B.Sc. &middot; Anonymous handles, accountable users.</footer>
 
@@ -163,11 +165,13 @@
       $('loginCard').classList.toggle('hidden', logged);
       $('composeCard').classList.toggle('hidden', !logged);
       $('rewardsCard').classList.toggle('hidden', !logged);
+      $('feedSection').classList.toggle('hidden', !logged);
       if (logged) {
         $('who').textContent = 'You are posting anonymously.';
         $('topbar').innerHTML = `<a href="#" id="logout">logout</a>`;
         $('logout').onclick = () => { localStorage.clear(); location.reload(); };
         loadMe();
+        load();
       } else {
         $('topbar').innerHTML = '';
       }
@@ -399,7 +403,6 @@
     });
 
     showState();
-    load();
   </script>
 </body>
 </html>
