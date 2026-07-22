@@ -74,8 +74,8 @@
                    margin-bottom:-2px; transition:all .2s; }
     .tabs button.active { color:var(--accent); border-bottom-color:var(--accent); background:transparent; }
 
-    /* Chat layout: feed scrolls, compose is fixed-ish at bottom */
-    #chatPanel { display:flex; flex-direction:column; flex:1; min-height:0; }
+    /* Chat layout: feed scrolls, compose stays pinned at bottom */
+    #chatPanel { display:flex; flex-direction:column; flex:1; min-height:0; height:calc(100vh - 200px); }
     #feed { flex:1; overflow-y:auto; padding:4px 0; }
     #composeCard { margin:8px 0 0; flex-shrink:0; }
 
