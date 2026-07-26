@@ -1,455 +1,654 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Whisper Room — B.Sc.</title>
-  <style>
-    :root { --bg:#0f1226; --card:#1a1f3d; --accent:#7c5cff; --text:#e8e9f2; --muted:#9aa0c7; }
-    * { box-sizing: border-box; }
-    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-           background: var(--bg); color: var(--text); height:100vh; overflow:hidden; display:flex; flex-direction:column; }
-    header { text-align:center; padding: 20px 16px 4px; flex-shrink:0; }
-    h1 { margin:0; font-size: 1.6rem; }
-    .wrap { max-width: 680px; margin: 0 auto; padding: 0 16px; width:100%; flex:1; min-height:0; display:flex; flex-direction:column; }
-    .card { background: var(--card); border-radius: 14px; padding: 18px; margin: 12px 0; }
-    .foot { text-align:center; color: var(--muted); font-size:.8rem; padding: 16px 16px 24px; flex-shrink:0; }
-    input { width:100%; padding: 11px; border-radius: 10px; border:1px solid #2c3361;
-            background:#12152e; color: var(--text); font-size:1rem; margin-top:8px; }
-    textarea { width:100%; min-height: 80px; resize: vertical; border-radius: 10px;
-               border:1px solid #2c3361; background:#12152e; color: var(--text);
-               padding: 12px; font-size: 1rem; margin-top:8px; }
-    button { margin-top: 12px; background: var(--accent); color:#fff; border:0;
-             padding: 10px 18px; border-radius: 10px; font-size:1rem; cursor:pointer; }
-    button:hover { filter: brightness(1.08); }
-    .msg { color: var(--muted); font-size:.85rem; margin-top:8px; min-height:1em; }
-    .rumor { background: var(--card); border-radius: 12px; padding: 14px 16px; margin: 10px 0;
-             border-left: 3px solid var(--accent); }
-    .rumor .meta { color: var(--muted); font-size:.75rem; margin-top:8px; }
-    .handle { font-weight:600; color: var(--accent); }
-    .topbar { text-align:right; font-size:.82rem; color: var(--muted); padding:4px 0; }
-    .streak { color:#ffd166; font-weight:600; }
-    a { color: var(--muted); }
-    .hidden { display:none !important; }
-    .foot { text-align:center; color: var(--muted); font-size:.8rem; padding: 16px 16px 24px; }
-    .controls { display:flex; gap:6px; flex-wrap:wrap; margin:8px 0 4px; }
-    .controls button { margin-top:0; padding:6px 10px; font-size:.8rem; background:#222a52; }
-    .controls button.active { background: var(--accent); }
-    .reactions { margin-top:8px; display:flex; gap:4px; flex-wrap:wrap; }
-    .reactions button { margin-top:0; padding:4px 8px; font-size:.8rem; background:#222a52; }
-    .reactions button.on { background: var(--accent); }
-    .metoo { margin-top:6px; }
-    .metoo button { margin-top:0; padding:4px 8px; font-size:.75rem; background:#222a52; }
-    .comments { margin-top:8px; border-top:1px solid #2c3361; padding-top:6px; }
-    .comment { font-size:.82rem; padding:4px 0; border-bottom:1px solid #20264a; }
-    .comment .ch { color: var(--muted); font-weight:600; }
-    .comForm { display:flex; gap:6px; margin-top:6px; }
-    .comForm input { margin-top:0; }
-    .tags { margin-top:6px; }
-    .tag { display:inline-block; background:#222a52; color:var(--muted); font-size:.7rem;
-           padding:2px 6px; border-radius:10px; margin-right:3px; }
-    .tagbtn { margin-top:0; padding:5px 12px; font-size:.8rem; background:#222a52;
-              border-radius:20px; margin-right:4px; }
-    .tagbtn.active { background: var(--accent); }
-    .pts { color:#ffd166; font-weight:600; }
-    .muted { color: var(--muted); font-size:.78rem; }
-    .rsection { margin-top:10px; }
-    .rlabel { font-size:.75rem; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:4px; }
-    .badgewrap { display:flex; flex-wrap:wrap; gap:4px; }
-    .badge { background:#2a2050; color:#ffd166; font-size:.75rem; padding:3px 8px; border-radius:12px; }
-    .chall { margin:6px 0; }
-    .chall-top { display:flex; justify-content:space-between; align-items:center; font-size:.85rem; gap:8px; }
-    .claimBtn { margin-top:0; padding:3px 10px; font-size:.75rem; background:#28a745; border-radius:14px; }
-    .bar { background:#12152e; border-radius:8px; height:6px; margin:4px 0; overflow:hidden; }
-    .fill { background:var(--accent); height:100%; border-radius:8px; transition:width .3s; }
-    .lbrow { display:flex; justify-content:space-between; font-size:.82rem; padding:3px 0; border-bottom:1px solid #20264a; }
-    .featured-badge { display:inline-block; background:linear-gradient(90deg,#ffd166,#ff7c5c); color:#1a1f3d; font-weight:700; font-size:.7rem; padding:2px 6px; border-radius:10px; margin-left:4px; }
-    .soft { color: var(--muted); opacity:.8; font-style:italic; }
-    .linkbtn { background:none; color:var(--muted); padding:0; margin-top:6px;
-               text-decoration:underline; font-size:.8rem; cursor:pointer; }
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no" />
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
+<title>Whisper Room — B.Sc.</title>
+<style>
+:root {
+  --bg:#0a0f1a; --surface:#111827; --card:#1a2332; --elevated:#1e293b;
+  --accent:#00d4ff; --accent-soft:rgba(0,212,255,0.12);
+  --text:#e2e8f0; --text-dim:#94a3b8; --text-muted:#64748b;
+  --border:rgba(51,65,85,0.6); --bg-input:#0f172a;
+  --radius-sm:8px; --radius-md:10px; --radius-lg:12px; --radius-full:50%;
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+       height:100vh; overflow:hidden; display:flex; flex-direction:column; }
+a { color:var(--accent); text-decoration:none; }
+input,textarea,button { font-family:inherit; }
+.hidden { display:none !important; }
 
-    /* Tabs */
-    .tabs { display:flex; gap:0; margin:8px 0; border-bottom:2px solid #2c3361; }
-    .tabs button { flex:1; margin:0; padding:10px; border-radius:0; background:transparent;
-                   color:var(--muted); font-size:.9rem; border-bottom:2px solid transparent;
-                   margin-bottom:-2px; transition:all .2s; }
-    .tabs button.active { color:var(--accent); border-bottom-color:var(--accent); background:transparent; }
+/* ===== HEADER ===== */
+header {
+  display:flex; justify-content:space-between; align-items:center;
+  padding:10px 16px; flex-shrink:0; background:var(--surface);
+  border-bottom:1px solid var(--border);
+}
+.header-left { display:flex; align-items:center; gap:10px; }
+.header-icon { width:36px; height:36px; background:var(--accent); border-radius:var(--radius-full);
+               display:flex; align-items:center; justify-content:center; }
+.header-icon svg { width:20px; height:20px; fill:#fff; }
+.header-title { font-size:15px; font-weight:700; line-height:1.2; }
+.header-sub { font-size:11px; color:var(--text-dim); }
+.header-right { display:flex; align-items:center; gap:12px; text-align:right; font-size:12px; }
+.stat-pts { color:#fbbf24; font-weight:600; }
+.stat-rank { color:var(--text-dim); }
+.header-logout { color:var(--text-muted); font-size:11px; cursor:pointer; }
+#headerPlus {
+  width:36px; height:36px; border-radius:var(--radius-full); background:var(--accent);
+  border:none; color:#fff; font-size:20px; cursor:pointer; display:flex;
+  align-items:center; justify-content:center; flex-shrink:0;
+}
 
-    /* Chat layout: feed scrolls, compose stays pinned at bottom */
-        #chatPanel { display:flex; flex-direction:column; flex:1; min-height:0; }
-        #feedSection { flex:1; min-height:0; display:flex; flex-direction:column; }
-        #feed { flex:1; overflow-y:auto; min-height:0; padding:4px 0; }
-        #composeCard { margin:8px 0 0; flex-shrink:0; }
+/* ===== FILTER PILLS ===== */
+.filter-row { display:flex; gap:6px; padding:8px 16px; flex-shrink:0; }
+.pill {
+  padding:6px 16px; border-radius:20px; border:1px solid var(--border);
+  background:transparent; color:var(--text-dim); font-size:12px; cursor:pointer;
+  transition:all .2s;
+}
+.pill.active { background:var(--accent); color:#fff; border-color:var(--accent); }
 
-    @media (max-width: 520px) {
-      h1 { font-size: 1.3rem; }
-      .wrap { padding: 0 10px; }
-    }
-  </style>
+/* ===== FEED ===== */
+#feedWrap { flex:1; min-height:0; overflow-y:auto; padding:8px 16px; }
+.whisper-card {
+  background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg);
+  padding:14px 16px; margin-bottom:10px; transition:all .2s;
+}
+.whisper-card.highlighted {
+  box-shadow:0 0 12px rgba(0,212,255,0.4),0 0 30px rgba(0,212,255,0.15);
+  border-color:rgba(0,212,255,0.3);
+}
+.whisper-card .card-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+.whisper-card .card-name { font-size:12px; color:var(--text-dim); font-weight:600; }
+.whisper-card .card-time { font-size:11px; color:var(--text-muted); }
+.whisper-card .card-text { font-size:14px; line-height:1.5; word-break:break-word; }
+.whisper-card .card-tags { display:flex; gap:4px; flex-wrap:wrap; margin-top:6px; }
+.card-tag {
+  background:var(--accent-soft); color:var(--accent); font-size:10px;
+  padding:2px 8px; border-radius:10px;
+}
+.featured-tag {
+  background:linear-gradient(135deg,#E53935,#FF6F00); color:#fff;
+  font-size:10px; padding:1px 8px; border-radius:10px; font-weight:600;
+}
+.bumped-badge {
+  background:var(--accent); color:var(--bg);
+  font-size:10px; padding:1px 8px; border-radius:10px; font-weight:600;
+}
+.card-badge-row { margin:0 0 4px 12px; }
+.card-badge { font-size:10px; color:var(--accent); font-weight:600; letter-spacing:0.02em; }
+
+/* ===== COMPOSE BAR ===== */
+#bottomBar { flex-shrink:0; background:var(--surface); border-top:1px solid var(--border); }
+#composeRow {
+  display:flex; align-items:center; gap:8px; padding:8px 16px;
+  background:var(--surface);
+}
+#composeRow input {
+  flex:1; height:40px; border-radius:20px; border:1px solid var(--border);
+  background:var(--bg-input); color:var(--text); padding:0 16px; font-size:13px;
+  outline:none;
+}
+#composeRow input:focus { border-color:var(--accent); }
+#composeRow .send-btn {
+  width:40px; height:40px; border-radius:var(--radius-full); background:var(--accent);
+  border:none; display:flex; align-items:center; justify-content:center; cursor:pointer;
+  flex-shrink:0;
+}
+#composeRow .send-btn svg { width:18px; height:18px; fill:#fff; }
+
+/* ===== NAV BAR ===== */
+#navBar {
+  display:flex; justify-content:space-around; align-items:center;
+  padding:6px 0 env(safe-area-inset-bottom,6px); background:var(--surface);
+  border-top:1px solid var(--border);
+}
+.nav-btn {
+  background:none; border:none; color:var(--text-muted); display:flex;
+  flex-direction:column; align-items:center; gap:2px; cursor:pointer; padding:4px 16px;
+  font-size:10px; transition:color .2s;
+}
+.nav-btn.active { color:var(--accent); }
+.nav-btn svg { width:22px; height:22px; fill:currentColor; }
+
+/* ===== AUTH OVERLAY ===== */
+#authOverlay {
+  position:fixed; inset:0; z-index:50; background:var(--bg);
+  display:flex; align-items:center; justify-content:center;
+}
+#authOverlay.hidden { display:none; }
+.auth-box {
+  background:var(--surface); border:1px solid var(--border); border-radius:16px;
+  padding:28px 24px; max-width:340px; width:90%;
+}
+.auth-box h2 { font-size:18px; margin-bottom:4px; }
+.auth-box p { color:var(--text-dim); font-size:12px; margin-bottom:16px; }
+.auth-box input {
+  width:100%; height:40px; border-radius:var(--radius-md);
+  border:1px solid var(--border); background:var(--bg-input); color:var(--text);
+  padding:0 12px; font-size:13px; margin-bottom:10px; outline:none;
+}
+.auth-box input:focus { border-color:var(--accent); }
+.auth-box .auth-btn {
+  width:100%; height:40px; border-radius:var(--radius-md); background:var(--accent);
+  color:#fff; border:none; font-size:13px; font-weight:600; cursor:pointer;
+}
+.auth-box .auth-link { color:var(--text-muted); font-size:11px; cursor:pointer; text-align:center; display:block; margin-top:10px; }
+#showReg {
+  width:100%; height:40px; border-radius:var(--radius-md);
+  background:transparent; color:var(--accent); border:1px solid var(--accent);
+  font-size:13px; font-weight:600; cursor:pointer; display:flex;
+  align-items:center; justify-content:center; margin-top:8px;
+  transition:background .2s;
+}
+#showReg:hover { background:rgba(0,212,255,0.08); }
+#showLogin {
+  width:100%; height:40px; border-radius:var(--radius-md);
+  background:transparent; color:var(--accent); border:1px solid var(--accent);
+  font-size:13px; font-weight:600; cursor:pointer; display:flex;
+  align-items:center; justify-content:center; margin-top:8px;
+  transition:background .2s;
+}
+#showLogin:hover { background:rgba(0,212,255,0.08); }
+.auth-err { font-size:11px; color:#ef4444; min-height:1em; margin-bottom:6px; }
+
+/* ===== PANELS ===== */
+.panel { flex:1; min-height:0; overflow-y:auto; padding:8px 16px; display:none; }
+.panel.active { display:block; }
+.panel-header { font-size:16px; font-weight:700; margin:12px 0 8px; }
+.panel-sub { font-size:11px; color:var(--text-dim); margin-bottom:12px; }
+.reward-card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:14px 16px; margin-bottom:12px; }
+.rlabel { font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:8px; }
+.badge-wrap { display:flex; flex-wrap:wrap; gap:4px; }
+.badge-item { background:rgba(255,209,102,0.12); color:#fbbf24; font-size:12px; padding:4px 10px; border-radius:12px; }
+.badge-selectable { cursor:pointer; transition:all .2s; border:1px solid transparent; }
+.badge-selectable:hover { background:rgba(255,209,102,0.2); }
+.badge-selectable.badge-selected { background:rgba(0,212,255,0.15); color:var(--accent); border-color:var(--accent); }
+
+/* ===== REWARDS REDESIGN ===== */
+.reward-stats-bar {
+  display:flex; gap:8px; margin-bottom:14px;
+}
+.reward-stat {
+  flex:1; background:var(--card); border:1px solid var(--border);
+  border-radius:var(--radius-lg); padding:10px 8px; text-align:center;
+}
+.rs-label { font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:.04em; }
+.rs-value { font-size:18px; font-weight:700; color:var(--accent); display:block; margin-top:2px; }
+.reward-block {
+  background:var(--card); border:1px solid var(--border);
+  border-radius:var(--radius-lg); padding:12px 14px; margin-bottom:10px;
+}
+.rb-header { font-size:12px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:8px; font-weight:600; }
+.reward-row { display:flex; gap:8px; margin-bottom:10px; }
+.reward-half { flex:1; min-width:0; margin-bottom:0; }
+.challenge-item { margin-bottom:10px; }
+.ch-row { display:flex; justify-content:space-between; align-items:center; font-size:13px; margin-bottom:4px; }
+.ch-bar { background:var(--bg-input); border-radius:8px; height:5px; overflow:hidden; }
+.ch-fill { background:var(--accent); height:100%; border-radius:8px; }
+.claim-btn { background:#22c55e; color:#fff; border:none; border-radius:14px; padding:3px 10px; font-size:11px; font-weight:600; cursor:pointer; }
+
+/* Shop */
+.shop-item { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid rgba(255,255,255,0.06); }
+.shop-item:last-child { border-bottom:none; }
+.shop-info { flex:1; }
+.shop-label { font-size:14px; font-weight:600; }
+.shop-desc { font-size:11px; color:var(--text-dim); margin-top:2px; }
+.shop-buy { background:var(--accent); border:none; color:#fff; border-radius:var(--radius-sm); padding:5px 14px; font-size:12px; font-weight:600; cursor:pointer; white-space:nowrap; }
+.shop-buy:disabled { opacity:0.4; cursor:default; }
+
+/* Bumped strip */
+.bumped-strip { display:flex; flex-direction:column; gap:4px; }
+.bumped-item { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:4px 0; border-bottom:1px solid rgba(255,255,255,0.05); font-size:12px; }
+.bumped-item:last-child { border-bottom:none; }
+.bumped-item-text { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-color); }
+.bumped-item-time { font-size:11px; color:var(--text-dim); flex-shrink:0; }
+
+/* Modal */
+.shop-modal-overlay { position:fixed; inset:0; z-index:100; background:rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center; }
+.shop-modal { background:var(--surface); border-radius:12px; padding:20px; max-width:360px; width:90%; max-height:70vh; overflow:hidden; display:flex; flex-direction:column; }
+.shop-modal h3 { margin:0 0 10px; font-size:15px; flex-shrink:0; }
+.shop-modal-body { flex:1; min-height:0; overflow-y:auto; padding-right:4px; }
+.shop-modal input[type=text] { width:100%; height:40px; border-radius:var(--radius-md); border:1px solid var(--border); background:var(--bg-input); color:var(--text); padding:0 12px; font-size:14px; margin-bottom:10px; box-sizing:border-box; outline:none; }
+.shop-modal input[type=text]:focus { border-color:var(--accent); }
+.shop-whisper-opt { padding:8px 10px; border-radius:var(--radius-sm); cursor:pointer; font-size:13px; display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; }
+.shop-whisper-opt:hover { background:rgba(0,212,255,0.1); }
+.shop-whisper-opt.selected { background:rgba(0,212,255,0.2); color:var(--accent); }
+.shop-whisper-opt .w-preview { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.shop-whisper-opt .w-badge { font-size:11px; color:var(--text-dim); margin-left:6px; }
+.shop-modal-btns { display:flex; gap:8px; margin-top:10px; }
+.shop-modal-btns button { flex:1; height:38px; border-radius:var(--radius-md); border:none; font-size:13px; font-weight:600; cursor:pointer; }
+.shop-btn-cancel { background:var(--elevated); color:var(--text); }
+.shop-btn-confirm { background:var(--accent); color:#fff; }
+.shop-btn-confirm:disabled { opacity:0.4; }
+
+/* Leaderboard */
+.leader-row { display:flex; justify-content:space-between; font-size:13px; padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.04); }
+.leader-row.leader-me { background:rgba(0,212,255,0.08); border-radius:6px; margin:0 -6px; padding:6px 6px; }
+.leader-row .rank { color:var(--accent); font-weight:700; margin-right:4px; }
+.leader-row .pts { color:var(--accent); }
+.feat-badge { font-size:12px; margin-left:4px; }
+
+/* Profile */
+.profile-card { text-align:center; padding:16px; }
+.profile-card .p-name { font-size:18px; font-weight:700; margin-bottom:4px; }
+.profile-card .p-stats { display:flex; justify-content:center; gap:16px; margin:12px 0; font-size:13px; }
+
+@media(max-width:520px){ header { padding:8px 12px; } #feedWrap { padding:6px 12px; } }
+</style>
 </head>
 <body>
-  <header>
-    <h1>Whisper Room — B.Sc.</h1>
-  </header>
-  <main class="wrap">
-    <div class="topbar" id="topbar"></div>
 
-    <!-- Tabs -->
-    <div class="tabs">
-      <button id="tabChat" class="active">Chat</button>
-      <button id="tabRewards">Rewards</button>
+<!-- Auth overlay -->
+<div id="authOverlay">
+  <div class="auth-box" id="loginBox">
+    <h2>Whisper Room</h2>
+    <p>Anonymous confessions for B.Sc. CS</p>
+    <input id="loginId" placeholder="Email or Handle" />
+    <input id="loginPw" type="password" placeholder="Password" />
+    <div class="auth-err" id="loginErr"></div>
+    <button class="auth-btn" id="loginBtn">Login</button>
+    <span class="auth-link" id="showReg">Don't have an account? Register</span>
+  </div>
+  <div class="auth-box hidden" id="regBox">
+    <h2>Join</h2>
+    <p>Real name + email required (only admin sees them).</p>
+    <input id="regName" placeholder="Real name" />
+    <input id="regEmail" type="email" placeholder="Email" />
+    <input id="regHandle" placeholder="Handle" />
+    <input id="regPw" type="password" placeholder="Password (min 4)" />
+    <div class="auth-err" id="regErr"></div>
+    <button class="auth-btn" id="regBtn">Register</button>
+    <span class="auth-link" id="showLogin">Already have an account? Login</span>
+  </div>
+</div>
+
+<!-- Header -->
+<header id="mainHeader" class="hidden">
+  <div class="header-left">
+    <div class="header-icon"><svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg></div>
+    <div><div class="header-title">Whisper Room</div><div class="header-sub">B.Sc. CS — Anonymous</div></div>
+  </div>
+  <div class="header-right">
+    <span class="stat-pts">⭐ <span id="statPoints">0</span> pts</span>
+    <span class="stat-rank">rank <span id="statRank">—</span></span>
+    <span class="header-logout" id="headerLogout">Logout</span>
+  </div>
+</header>
+
+<!-- Filter pills -->
+<div id="filterRow" class="filter-row hidden">
+  <button class="pill active" data-filter="">All</button>
+  <button class="pill" data-filter="rumors">rumors</button>
+  <button class="pill" data-filter="exam">exam</button>
+</div>
+
+<main id="contentArea" style="flex:1; min-height:0; display:flex; flex-direction:column; overflow:hidden;">
+<!-- Feed -->
+<div class="panel" id="feedWrap"></div>
+
+<!-- Rewards Panel -->
+<div class="panel" id="rewardsPanel">
+  <div class="panel-header">🏆 Rewards</div>
+  <!-- Stats bar -->
+  <div class="reward-stats-bar">
+    <div class="reward-stat"><span class="rs-label">Points</span><span class="rs-value" id="statRwdPoints">0</span></div>
+    <div class="reward-stat"><span class="rs-label">Rank</span><span class="rs-value" id="statRwdRank">—</span></div>
+    <div class="reward-stat"><span class="rs-label">Badges</span><span class="rs-value" id="statBadgeCount">0</span></div>
+  </div>
+  <!-- Badges -->
+  <div class="reward-block">
+    <div class="rb-header">Badges</div>
+    <div class="badge-wrap" id="badgesEl"></div>
+  </div>
+  <!-- Two-column: Challenges + Leaderboard -->
+  <div class="reward-row">
+    <div class="reward-block reward-half">
+      <div class="rb-header">Weekly Challenges</div>
+      <div id="challengesEl"></div>
     </div>
-
-    <!-- ===== CHAT PANEL ===== -->
-    <div id="chatPanel">
-
-      <!-- Register -->
-      <div class="card" id="registerCard">
-        <strong>First time? Create your account</strong>
-        <input id="real_name" placeholder="Real name" />
-        <input id="reg_email" type="email" placeholder="Email (for login)" />
-        <input id="reg_handle" placeholder="Handle (username, 3-20 chars)" />
-        <input id="reg_pw" type="password" placeholder="Password (min 4 chars)" />
-        <button id="register">Register</button>
-        <div class="msg" id="regMsg"></div>
-      </div>
-
-      <!-- Login -->
-      <div class="card hidden" id="loginCard">
-        <strong>Log in to post</strong>
-        <input id="login_identifier" placeholder="Email or Handle" />
-        <input id="login_pw" type="password" placeholder="Password" />
-        <button id="login">Login</button>
-        <div class="msg" id="loginMsg"></div>
-        <button class="linkbtn" id="forgotLink">Forgot password?</button>
-      </div>
-
-      <!-- Forgot password -->
-      <div class="card hidden" id="forgotCard">
-        <strong>Reset password</strong>
-        <p class="msg">Enter your handle. The admin will reset your password manually.</p>
-        <input id="forgot_handle" placeholder="Handle" />
-        <button id="forgotSubmit">Request reset</button>
-        <div class="msg" id="forgotMsg"></div>
-        <button class="linkbtn" id="backLink">Back to login</button>
-      </div>
-
-      <!-- Feed (chat messages, oldest→newest) -->
-      <div id="feedSection" class="hidden">
-        <div class="controls">
-          <button id="filterAll" class="active">All</button>
-          <button id="filterRumors">rumors</button>
-          <button id="filterExam">exam</button>
-        </div>
-        <div id="feed"></div>
-      </div>
-
-      <!-- Compose (at bottom) -->
-      <div class="card hidden" id="composeCard">
-        <span id="who"></span>
-        <textarea id="text" placeholder="Whisper something about class..." maxlength="500"></textarea>
-        <div class="tagpick" style="margin-top:8px">
-          <span style="color:var(--muted);font-size:.78rem;margin-right:6px">Category:</span>
-          <button type="button" class="tagbtn active" data-tag="rumors">rumors</button>
-          <button type="button" class="tagbtn" data-tag="exam">exam</button>
-        </div>
-        <button id="post">Whisper</button>
-        <div class="msg" id="msg"></div>
-      </div>
+    <div class="reward-block reward-half">
+      <div class="rb-header">Leaderboard</div>
+      <div id="leaderboardEl"></div>
     </div>
+  </div>
+  <!-- Recently Bumped -->
+  <div class="reward-block">
+    <div class="rb-header">Recently Bumped</div>
+    <div id="recentBumpedEl"></div>
+  </div>
+  <!-- Shop -->
+  <div class="reward-block">
+    <div class="rb-header">🏪 Shop</div>
+    <div id="shopEl"></div>
+  </div>
+</div>
 
-    <!-- ===== REWARDS PANEL ===== -->
-    <div class="hidden" id="rewardsPanel">
-      <div class="card">
-        <details open>
-          <summary><strong>🏆 Your rewards</strong></summary>
-          <div class="rsection"><div class="rlabel">Badges</div><div id="badges" class="badgewrap"></div></div>
-          <div class="rsection"><div class="rlabel">Weekly challenges</div><div id="challenges"></div></div>
-          <div class="rsection"><div class="rlabel">Leaderboard (anonymized)</div><div id="leaderboard"></div></div>
-        </details>
-      </div>
-    </div>
+<div class="panel" id="profilePanel">
+  <div class="panel-header">👤 Profile</div>
+  <div id="profileEl"></div>
+</div>
+</main>
 
-  </main>
-  <footer class="foot">Whisper Room — B.Sc. &middot; Anonymous handles, accountable users.</footer>
+<!-- Bottom bar -->
+<footer id="bottomBar" class="hidden">
+  <div id="composeRow">
+    <input id="composeInput" type="text" placeholder="What's on your mind..." maxlength="500" />
+    <button class="send-btn" id="sendBtn"><svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg></button>
+  </div>
+  <nav id="navBar">
+    <button class="nav-btn active" id="navHome"><svg viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>Chat</button>
+    <button class="nav-btn" id="navReward"><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>Reward</button>
+    <button class="nav-btn" id="navProfile"><svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>Profile</button>
+  </nav>
+</footer>
 
-  <script>
-    const $ = id => document.getElementById(id);
-    const api = (method, url, body) => fetch(url, {
-      method, headers: {'Content-Type':'application/json'},
-      body: body ? JSON.stringify(body) : undefined
+<script>
+const $ = id => document.getElementById(id);
+const api = (method, url, body) => fetch(url, { method, headers: {'Content-Type':'application/json'}, body: body ? JSON.stringify(body) : undefined });
+const esc = s => { if (typeof s !== 'string') s = String(s); return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]); };
+const fmtTime = iso => { const d = new Date(iso); return d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); };
+const isLogged = () => localStorage.getItem('cw_logged') === '1';
+
+let filterTag = '';
+let selectedTag = 'rumors';
+let loadingFeed = false;
+let loadingRewards = false;
+let posting = false;
+let currentUserId = null;
+
+function switchPanel(id) {
+  var panelMap = {feed:'feedWrap',rewards:'rewardsPanel',profile:'profilePanel'};
+  Object.keys(panelMap).forEach(function(k) { $(panelMap[k]).classList.toggle('active', k === id); });
+  var navMap = {feed:'navHome',rewards:'navReward',profile:'navProfile'};
+  Object.keys(navMap).forEach(function(k) { $(navMap[k]).classList.toggle('active', k === id); });
+  // Only show compose bar on Chat tab
+  var composeRow = $('composeRow');
+  if (composeRow) composeRow.style.display = (id === 'feed') ? '' : 'none';
+  if (id === 'rewards' || id === 'profile') loadRewards();
+}
+
+/* ===== AUTH ===== */
+$('showReg').onclick = () => { $('loginBox').classList.add('hidden'); $('regBox').classList.remove('hidden'); };
+$('showLogin').onclick = () => { $('regBox').classList.add('hidden'); $('loginBox').classList.remove('hidden'); };
+$('loginBtn').onclick = async () => {
+  const r = await api('POST', '/api/login', { identifier: $('loginId').value.trim(), password: $('loginPw').value });
+  const j = await r.json();
+  if (r.ok) { localStorage.setItem('cw_logged','1'); $('loginErr').textContent = ''; currentUserId = j.user_id || null; updateUI(); loadFeed(); }
+  else $('loginErr').textContent = j.error;
+};
+$('regBtn').onclick = async () => {
+  const r = await api('POST', '/api/register', { real_name: $('regName').value.trim(), email: $('regEmail').value.trim().toLowerCase(), handle: $('regHandle').value.trim(), password: $('regPw').value });
+  const j = await r.json();
+  $('regErr').textContent = r.ok ? 'Registered! Now log in.' : j.error;
+  $('regErr').style.color = r.ok ? '#22c55e' : '#ef4444';
+};
+$('headerLogout').onclick = () => { localStorage.clear(); location.reload(); };
+
+/* ===== COMPOSE ===== */
+$('sendBtn').onclick = postWhisper;
+$('composeInput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); postWhisper(); } });
+
+async function postWhisper() {
+  if (posting) return;
+  const text = $('composeInput').value.trim();
+  if (!text) return;
+  posting = true;
+  $('sendBtn').disabled = true;
+  try {
+    const r = await api('POST', '/api/rumors', { text, tags: [selectedTag] });
+    if (r.ok) { $('composeInput').value = ''; loadFeed(true); }
+  } finally {
+    posting = false;
+    $('sendBtn').disabled = false;
+  }
+}
+
+/* ===== FILTER PILLS ===== */
+document.querySelectorAll('.pill').forEach(b => {
+  b.onclick = () => {
+    document.querySelectorAll('.pill').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    filterTag = b.dataset.filter;
+    loadFeed();
+  };
+});
+
+/* ===== NAV ===== */
+$('navHome').onclick = () => switchPanel('feed');
+$('navReward').onclick = () => switchPanel('rewards');
+$('navProfile').onclick = () => switchPanel('profile');
+
+/* ===== FEED ===== */
+function scrollFeedToBottom() {
+  const el = $('feedWrap');
+  if (!el) return;
+  el.scrollTop = el.scrollHeight;
+}
+
+async function loadFeed(forceBottom = false) {
+  if (loadingFeed) return;
+  loadingFeed = true;
+  try {
+    const el = $('feedWrap');
+    const shouldStickBottom = forceBottom || (el && el.scrollHeight - el.scrollTop - el.clientHeight < 120);
+    const url = '/api/rumors' + (filterTag ? '?tag=' + encodeURIComponent(filterTag) : '');
+    const r = await api('GET', url);
+    if (!r.ok) return;
+    const data = await r.json();
+    if (!data.rumors.length) { el.innerHTML = '<p style="text-align:center;margin-top:20px;color:var(--text-dim)">No whispers yet. Be the first.</p>'; return; }
+    el.innerHTML = [...data.rumors].reverse().map(x => {
+      const bumped = x.bumped ? ' <span class="bumped-badge">⏫ Bumped</span>' : '';
+      const feat = x.featured ? '<span class="featured-tag">✨ Featured</span>' : '';
+      const tags = (x.tags || []).map(t => '<span class="card-tag">#' + esc(t) + '</span>').join('');
+      const highlighted = x.highlighted ? ' highlighted' : '';
+      const handle = esc(x.handle || 'Anonymous');
+      const displayHandle = currentUserId ? (x.user_id === currentUserId ? 'You' : 'Anonymous') : handle;
+      const badgeHtml = x.badge_label ? ' <span class="card-badge">\uD83C\uDFC5 ' + esc(x.badge_label) + '</span>' : '';
+      return '<div class="whisper-card' + highlighted + '">' +
+        '<div class="card-head"><span class="card-name">' + displayHandle + bumped + feat + '</span><span class="card-time">' + fmtTime(x.created_at) + '</span></div>' +
+        (badgeHtml ? '<div class="card-badge-row">' + badgeHtml + '</div>' : '') +
+        '<div class="card-text">' + esc(x.text) + '</div>' +
+        (tags ? '<div class="card-tags">' + tags + '</div>' : '') +
+      '</div>';
+    }).join('');
+    loadingFeed = false;
+    if (shouldStickBottom) scrollFeedToBottom();
+  } finally {
+    loadingFeed = false;
+  }
+}
+
+/* ===== REWARDS ===== */
+async function loadRewards() {
+  if (loadingRewards) return;
+  loadingRewards = true;
+  try {
+  const r = await api('GET', '/api/me');
+  if (!r.ok) return;
+  const me = await r.json();
+  $('statPoints').textContent = me.points || 0;
+  $('statRank').textContent = me.rank || '—';
+  const rp = $('statRwdPoints'); if (rp) rp.textContent = me.points || 0;
+  const rr = $('statRwdRank'); if (rr) rr.textContent = me.rank || '—';
+  currentUserId = me.user_id || null;
+
+  // Badges
+  const be = $('badgesEl');
+  if (be) {
+    const bd = me.badges || [];
+    const badgeEl = $('statBadgeCount');
+    if (badgeEl) badgeEl.textContent = bd.length;
+    if (!bd.length) be.innerHTML = '<span style="font-size:13px;color:var(--text-dim)">No badges yet</span>';
+    else be.innerHTML = bd.map(b => '<span class="badge-item">' + esc(b.label) + '</span>').join('');
+  }
+
+  // Challenges
+  const cr = await api('GET', '/api/challenges');
+  const chal = cr.ok ? await cr.json() : { challenges: [] };
+  const ce = $('challengesEl');
+  if (ce) {
+    ce.innerHTML = chal.challenges.map(c => {
+      const pct = Math.min(Math.round((c.progress / c.goal) * 100), 100);
+      const btn = c.completed && !c.claimed
+        ? '<button class="claim-btn" data-key="' + c.key + '">Claim +' + c.reward + '</button>'
+        : c.claimed ? '<span style="font-size:12px;color:var(--text-dim)">\u2713 claimed</span>' : '<span style="font-size:12px;color:var(--text-dim)">+' + c.reward + ' pts</span>';
+      return '<div class="challenge-item">' +
+        '<div class="ch-row"><span>' + esc(c.label) + '</span>' + btn + '</div>' +
+        '<div class="ch-bar"><div class="ch-fill" style="width:' + pct + '%"></div></div>' +
+        '<div style="font-size:11px;color:var(--text-dim)">' + c.progress + '/' + c.goal + '</div></div>';
+    }).join('');
+    ce.querySelectorAll('.claim-btn').forEach(b => {
+      b.onclick = async () => {
+        const rr = await api('POST', '/api/challenges/' + b.dataset.key + '/claim');
+        if (rr.ok) loadRewards();
+        else { const e = await rr.json(); alert(e.error || 'Could not claim'); }
+      };
     });
-    const REACTIONS = { laugh:'😂', fire:'🔥', hundred:'💯', shock:'😮' };
+  }
 
-    let filterTag = '';
-    let activeTab = 'chat';
-    const isLogged = () => localStorage.getItem('cw_logged') === '1';
+  // Leaderboard
+  const lr = await api('GET', '/api/leaderboard');
+  const lb = lr.ok ? await lr.json() : { leaderboard: [] };
+  const le = $('leaderboardEl');
+  if (le) {
+    le.innerHTML = (!lb.leaderboard || !lb.leaderboard.length)
+      ? '<span style="font-size:13px;color:var(--text-dim)">No players yet.</span>'
+      : lb.leaderboard.map(x =>
+        '<div class="leader-row' + (x.is_me ? ' leader-me' : '') + '"><span><span class="rank">' + x.rank + '.</span> ' + (x.is_me ? '<strong>You</strong>' : esc(x.alias)) + (x.featured ? ' <span class="feat-badge">\uD83D\uDC51</span>' : '') + '</span><span class="pts">\u2B50 ' + x.points + '</span></div>'
+      ).join('');
+  }
 
-    function switchTab(tab) {
-      activeTab = tab;
-      $('tabChat').classList.toggle('active', tab === 'chat');
-      $('tabRewards').classList.toggle('active', tab === 'rewards');
-      $('chatPanel').classList.toggle('hidden', tab !== 'chat');
-      $('rewardsPanel').classList.toggle('hidden', tab !== 'rewards');
-      const logged = isLogged();
-      if (tab === 'rewards' && logged) {
-        loadMe();
-        $('rewardsPanel').classList.remove('hidden');
-      }
+  // Shop
+  loadShop();
+
+  // Recently Bumped
+  const rbe = $('recentBumpedEl');
+  if (rbe) {
+    const rb = me.recent_bumped || [];
+    if (!rb.length) {
+      rbe.innerHTML = '<span style="font-size:13px;color:var(--text-dim)">No recently bumped whispers.</span>';
+    } else {
+      rbe.innerHTML = '<div class="bumped-strip">' + rb.map(w =>
+        '<div class="bumped-item"><span class="bumped-item-text">⏫ ' + esc(w.preview) + '</span><span class="bumped-item-time">' + fmtTime(w.bumped_at) + '</span></div>'
+      ).join('') + '</div>';
     }
+  }
 
-    function showState() {
-      const logged = isLogged();
-      $('registerCard').classList.toggle('hidden', logged);
-      $('loginCard').classList.toggle('hidden', logged);
-      $('composeCard').classList.toggle('hidden', !logged);
-      $('feedSection').classList.toggle('hidden', !logged);
-      if (logged) {
-        $('who').textContent = 'You are posting anonymously.';
-        $('topbar').innerHTML = `<a href="#" id="logout">logout</a>`;
-        $('logout').onclick = () => { localStorage.clear(); location.reload(); };
-        load();
-        if (activeTab === 'rewards') loadMe();
-      } else {
-        $('topbar').innerHTML = '';
-      }
-    }
+  // Profile
+  const pe = $('profileEl');
+  if (pe) {
+    const bd = me.badges || [];
+    const sel = me.selected_badge || null;
+    const badgeChips = !bd.length ? '<span style="font-size:13px;color:var(--text-dim)">No badges yet</span>' :
+      bd.map(b => '<span class="badge-item badge-selectable' + (b.key === sel ? ' badge-selected' : '') + '" data-key="' + esc(b.key) + '">' + esc(b.label) + '</span>').join('');
+    pe.innerHTML = '<div class="profile-card">' +
+      '<div class="p-name">' + esc(me.handle) + (me.featured ? ' <span class="feat-badge">\uD83D\uDC51</span>' : '') + '</div>' +
+      '<div class="p-stats"><span>\u2B50 <strong>' + (me.points || 0) + '</strong> pts</span><span>\uD83C\uDFC6 rank <strong>' + (me.rank || '—') + '</strong></span></div>' +
+      '<div class="reward-block" style="margin-top:10px"><div class="rb-header">\uD83C\uDFC5 Your Badges (tap to display)</div><div class="badge-wrap">' + badgeChips + '</div></div>' +
+      '</div>';
+    pe.querySelectorAll('.badge-selectable').forEach(el => {
+      el.onclick = async () => {
+        const key = el.dataset.key;
+        const res = await api('POST', '/api/badge/select', { key: key });
+        if (res.ok) { loadRewards(); }
+        else { const e = await res.json(); alert(e.error || 'Failed to select badge'); }
+      };
+    });
+  }
+  } finally {
+    loadingRewards = false;
+  }
+}
 
-    function escapeHtml(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+/* ===== SHOP ===== */
+async function loadShop() {
+  const el = $('shopEl');
+  if (!el) return;
+  const [sRes, meRes] = await Promise.all([api('GET', '/api/shop'), api('GET', '/api/me')]);
+  if (!sRes.ok || !meRes.ok) return;
+  const shop = await sRes.json();
+  const me = await meRes.json();
+  const pts = me.points || 0;
+  el.innerHTML = Object.entries(shop.items).map(([k, v]) => {
+    const aff = pts >= v.price ? '' : ' disabled';
+    return '<div class="shop-item"><div class="shop-info"><div class="shop-label">' + v.label + '</div><div class="shop-desc">' + esc(v.desc) + '</div></div>' +
+      '<button class="shop-buy" data-kind="' + k + '" data-price="' + v.price + '"' + aff + '>' + v.price + ' pts</button></div>';
+  }).join('');
+  el.querySelectorAll('.shop-buy').forEach(b => {
+    b.onclick = function() { openShopModal(this.dataset.kind, parseInt(this.dataset.price)); };
+  });
+}
 
-    async function loadMe() {
-      const r = await api('GET', '/api/me');
-      if (r.ok) {
-        const j = await r.json();
-        const streakTxt = j.streak > 0 ? `<span class="streak">🔥 ${j.streak}-day${j.streak_at_risk_today ? ' (don\'t lose it today!)' : ''}</span> · ` : '';
-        const rankTxt = j.rank ? `#${j.rank}` : '—';
-        $('topbar').innerHTML = `${streakTxt}<span class="pts">⭐ ${j.points} pts</span> · rank ${rankTxt} · <a href="#" id="logout">logout</a>`;
-        $('logout').onclick = () => { localStorage.clear(); location.reload(); };
-        renderBadges(j.badges || []);
-        loadChallenges();
-        loadLeaderboard();
-      }
-    }
-
-    function renderBadges(badges) {
-      const el = $('badges');
-      if (!el) return;
-      if (!badges.length) { el.innerHTML = '<span class="muted">No badges yet — post your first whisper!</span>'; return; }
-      el.innerHTML = badges.map(b => `<span class="badge">🏅 ${escapeHtml(b.label)}</span>`).join('');
-    }
-
-    async function loadChallenges() {
-      const el = $('challenges');
-      if (!el) return;
-      const r = await api('GET', '/api/challenges');
-      if (!r.ok) return;
-      const j = await r.json();
-      el.innerHTML = j.challenges.map(c => {
-        const pct = Math.round((c.progress / c.goal) * 100);
-        const btn = c.completed && !c.claimed
-          ? `<button class="claimBtn" data-key="${c.key}">Claim +${c.reward}</button>`
-          : c.claimed ? `<span class="muted">✓ claimed</span>` : `<span class="muted">+${c.reward} pts</span>`;
-        return `<div class="chall">
-          <div class="chall-top"><span>${escapeHtml(c.label)}</span>${btn}</div>
-          <div class="bar"><div class="fill" style="width:${pct}%"></div></div>
-          <div class="muted">${c.progress}/${c.goal}</div>
-        </div>`;
-      }).join('');
-      el.querySelectorAll('.claimBtn').forEach(b => {
-        b.onclick = async () => {
-          const rr = await api('POST', `/api/challenges/${b.dataset.key}/claim`);
-          if (rr.ok) loadMe();
-          else { const e = await rr.json(); alert(e.error || 'Could not claim'); }
+function openShopModal(kind, price) {
+  if (kind === 'featured' || kind.startsWith('badge_')) {
+    (async function() {
+      const r = await api('POST', '/api/shop/buy', { kind: kind });
+      if (r.ok) { const j = await r.json(); $('statPoints').textContent = j.points; const rp = $('statRwdPoints'); if (rp) rp.textContent = j.points; loadRewards(); }
+      else { const e = await r.json(); alert(e.error || 'Purchase failed'); }
+    })();
+  } else {
+    // highlight / bump / incognito — pick a whisper
+    (async function() {
+      const wRes = await api('GET', '/api/me/whispers');
+      if (!wRes.ok) return;
+      const wj = await wRes.json();
+      const whispers = wj.whispers || [];
+      if (!whispers.length) { alert('You have no whispers to apply this to.'); return; }
+      const overlay = document.createElement('div');
+      overlay.className = 'shop-modal-overlay';
+      const labels = { highlight: '\u2728 Highlight', bump: '\u23EB Bump', incognito: '\uD83D\uDC7B Incognito' };
+      let html = '<div class="shop-modal"><h3>' + (labels[kind] || kind) + '</h3><div class="shop-modal-body">' +
+        '<p style="font-size:13px;color:var(--text-dim);margin-bottom:10px">Select a whisper to apply this to:</p>';
+      whispers.forEach(function(w) {
+        const preview = (w.preview || '').substring(0, 60);
+        const badges = [];
+        if (w.highlighted) badges.push('\u2728');
+        if (w.is_incognito) badges.push('\uD83D\uDC7B');
+        html += '<div class="shop-whisper-opt" data-rid="' + w.id + '"><span class="w-preview">' + esc(preview) + '</span><span class="w-badge">' + badges.join(' ') + '</span></div>';
+      });
+      html += '</div><div class="shop-modal-btns"><button class="shop-btn-cancel">Cancel</button><button class="shop-btn-confirm" id="whisperConfirm" disabled>Buy (' + price + ' pts)</button></div></div>';
+      overlay.innerHTML = html;
+      document.body.appendChild(overlay);
+      var selected = null;
+      overlay.querySelectorAll('.shop-whisper-opt').forEach(function(el) {
+        el.onclick = function() {
+          overlay.querySelectorAll('.shop-whisper-opt').forEach(function(x) { x.classList.remove('selected'); });
+          el.classList.add('selected');
+          selected = parseInt(el.dataset.rid);
+          overlay.querySelector('#whisperConfirm').disabled = false;
         };
       });
-    }
-
-    async function loadLeaderboard() {
-      const el = $('leaderboard');
-      if (!el) return;
-      const r = await api('GET', '/api/leaderboard');
-      if (!r.ok) return;
-      const j = await r.json();
-      if (!j.leaderboard.length) { el.innerHTML = '<span class="muted">No players yet.</span>'; return; }
-      el.innerHTML = j.leaderboard.map(x =>
-        `<div class="lbrow"><span>${x.rank}. ${escapeHtml(x.alias)}</span><span class="pts">⭐ ${x.points}</span></div>`
-      ).join('');
-    }
-
-    async function toggleReact(rid, kind, btn) {
-      const r = await api('POST', `/api/rumors/${rid}/react`, { kind });
-      if (r.ok) {
-        const j = await r.json();
-        btn.classList.toggle('on', j.reacted);
-        btn.textContent = `${REACTIONS[kind]} ${j.count}`;
-      }
-    }
-
-    async function toggleMeToo(rid, btn) {
-      const r = await api('POST', `/api/rumors/${rid}/metoo`);
-      if (r.ok) {
-        const j = await r.json();
-        btn.classList.toggle('on', j.active);
-        btn.textContent = `🙋 Me too${j.count ? ' ' + j.count : ''}`;
-      }
-    }
-
-    async function postComment(rid, input) {
-      const text = input.value.trim();
-      if (!text) return;
-      const r = await api('POST', `/api/rumors/${rid}/comments`, { text });
-      if (r.ok) { input.value=''; load(); }
-    }
-
-    async function load() {
-      const url = '/api/rumors' + (filterTag ? '?tag=' + encodeURIComponent(filterTag) : '');
-      const r = await api('GET', url);
-      const data = await r.json();
-      $('feed').innerHTML = '';
-      if (!data.rumors.length) {
-        $('feed').innerHTML = '<p class="msg" style="text-align:center;margin-top:20px">No whispers yet. Be the first.</p>';
-        return;
-      }
-      // Reverse: API returns newest first, we want oldest→top, newest→bottom
-      const reversed = [...data.rumors].reverse();
-      for (const x of reversed) {
-        const isNew = x.is_new;
-        const d = document.createElement('div');
-        d.className = 'rumor';
-        const feat = x.featured ? `<span class="featured-badge">✨ Featured</span>` : '';
-        const tags = (x.tags || []).map(t => `<span class="tag">#${escapeHtml(t)}</span>`).join('');
-        const softMeta = (label, n) => (isNew && !n)
-          ? `<span class="soft">${label} · be the first</span>`
-          : `${label} ${n || 0}`;
-        d.innerHTML = `<div><span class="handle">Anonymous</span>${feat}</div>
-          <div style="margin-top:6px">${escapeHtml(x.text)}</div>
-          ${tags ? `<div class="tags">${tags}</div>` : ''}
-          <div class="meta">${new Date(x.created_at).toLocaleString()} · ${softMeta('💬', x.comment_count)} · ${softMeta('🙋', x.me_too_count)}</div>`;
-        const rc = document.createElement('div');
-        rc.className = 'reactions';
-        for (const [k, emoji] of Object.entries(REACTIONS)) {
-          const b = document.createElement('button');
-          const n = x.reactions ? x.reactions[k] : 0;
-          b.textContent = (isNew && !n) ? `${emoji}` : `${emoji} ${n}`;
-          if (isNew && !n) b.classList.add('soft');
-          b.onclick = () => toggleReact(x.id, k, b);
-          rc.appendChild(b);
-        }
-        d.appendChild(rc);
-        const mt = document.createElement('div');
-        mt.className = 'metoo';
-        const mb = document.createElement('button');
-        mb.textContent = `🙋 Me too${x.me_too_count ? ' ' + x.me_too_count : ''}`;
-        mb.onclick = () => toggleMeToo(x.id, mb);
-        mt.appendChild(mb);
-        d.appendChild(mt);
-        const cm = document.createElement('div');
-        cm.className = 'comments';
-        const cl = document.createElement('div');
-        const cr = await api('GET', `/api/rumors/${x.id}/comments`);
-        const cj = await cr.json();
-        const myHandle = localStorage.getItem('cw_handle');
-        (cj.comments || []).forEach(c => {
-          const cd = document.createElement('div');
-          cd.className = 'comment';
-          const label = (myHandle && c.handle === myHandle) ? 'You' : 'Anonymous';
-          cd.innerHTML = `<span class="ch">${label}</span>: ${escapeHtml(c.text)}`;
-          cl.appendChild(cd);
-        });
-        cm.appendChild(cl);
-        if (isLogged()) {
-          const cf = document.createElement('div');
-          cf.className = 'comForm';
-          const ci = document.createElement('input');
-          ci.placeholder = 'Add a comment...';
-          const cbtn = document.createElement('button');
-          cbtn.textContent = 'Reply';
-          cbtn.onclick = () => postComment(x.id, ci);
-          cf.appendChild(ci); cf.appendChild(cbtn);
-          cm.appendChild(cf);
-        }
-        d.appendChild(cm);
-        $('feed').appendChild(d);
-      }
-      // Scroll to bottom (newest)
-      const feed = $('feed');
-      feed.scrollTop = feed.scrollHeight;
-    }
-
-    $('register').onclick = async () => {
-      const r = await api('POST', '/api/register', {
-        real_name: $('real_name').value.trim(),
-        email: $('reg_email').value.trim().toLowerCase(),
-        handle: $('reg_handle').value.trim(),
-        password: $('reg_pw').value
-      });
-      const j = await r.json();
-      if (r.ok) { $('regMsg').textContent = 'Registered! Now log in.'; $('regMsg').style.color = '#7cff9c'; }
-      else $('regMsg').textContent = j.error;
-    };
-
-    $('login').onclick = async () => {
-      const r = await api('POST', '/api/login', {
-        identifier: $('login_identifier').value.trim(),
-        password: $('login_pw').value
-      });
-      const j = await r.json();
-      if (r.ok) {
-        localStorage.setItem('cw_logged', '1');
-        localStorage.setItem('cw_handle', j.handle);
-        showState(); load(); $('loginMsg').textContent='';
-      }
-      else $('loginMsg').textContent = j.error;
-    };
-
-    let selectedTag = 'rumors';
-    document.querySelectorAll('.tagbtn').forEach(b => {
-      b.onclick = () => {
-        document.querySelectorAll('.tagbtn').forEach(x => x.classList.remove('active'));
-        b.classList.add('active');
-        selectedTag = b.dataset.tag;
+      overlay.querySelector('.shop-btn-cancel').onclick = function() { overlay.remove(); };
+      overlay.querySelector('#whisperConfirm').onclick = async function() {
+        if (!selected) return;
+        overlay.querySelector('#whisperConfirm').disabled = true;
+        const r = await api('POST', '/api/shop/buy', { kind: kind, rumor_id: selected });
+        if (r.ok) { const j = await r.json(); $('statPoints').textContent = j.points; loadRewards(); loadFeed(); overlay.remove(); }
+        else { const e = await r.json(); alert(e.error || 'Purchase failed'); overlay.querySelector('#whisperConfirm').disabled = false; }
       };
-    });
+    })();
+  }
+}
 
-    $('post').onclick = async () => {
-      const text = $('text').value.trim();
-      if (!text) { $('msg').textContent = 'Write something first.'; return; }
-      const tags = [selectedTag];
-      const r = await api('POST', '/api/rumors', { text, tags });
-      if (r.ok) { $('text').value=''; $('msg').textContent='Whispered. 🤫'; load(); }
-      else $('msg').textContent = 'Could not post.';
-    };
+/* ===== UI STATE ===== */
+function updateUI() {
+  const logged = isLogged();
+  $('authOverlay').classList.toggle('hidden', logged);
+  $('mainHeader').classList.toggle('hidden', !logged);
+  $('filterRow').classList.toggle('hidden', !logged);
+  $('bottomBar').classList.toggle('hidden', !logged);
+  if (logged) { switchPanel('feed'); loadFeed(); loadRewards(); }
+}
 
-    $('forgotLink').onclick = () => {
-      $('loginCard').classList.add('hidden');
-      $('forgotCard').classList.remove('hidden');
-    };
-    $('backLink').onclick = () => {
-      $('forgotCard').classList.add('hidden');
-      $('loginCard').classList.remove('hidden');
-    };
-    $('forgotSubmit').onclick = async () => {
-      const r = await api('POST', '/api/forgot-password', { handle: $('forgot_handle').value.trim() });
-      const j = await r.json();
-      $('forgotMsg').textContent = j.message || j.error;
-      $('forgotMsg').style.color = r.ok ? '#7cff9c' : '#ff8a8a';
-    };
-
-    const FILTERS = { filterAll:'', filterRumors:'rumors', filterExam:'exam' };
-    Object.keys(FILTERS).forEach(id => {
-      $(id).onclick = () => {
-        filterTag = FILTERS[id];
-        Object.keys(FILTERS).forEach(x => $(x).classList.remove('active'));
-        $(id).classList.add('active');
-        load();
-      };
-    });
-
-    // Tab switching
-    $('tabChat').onclick = () => switchTab('chat');
-    $('tabRewards').onclick = () => switchTab('rewards');
-
-    showState();
-  </script>
+/* ===== INIT ===== */
+document.addEventListener('keydown', function(e) { if (e.key === 'Enter') { var f = document.activeElement; if (f && f.id === 'composeInput') { e.preventDefault(); postWhisper(); } } });
+updateUI();
+</script>
 </body>
 </html>

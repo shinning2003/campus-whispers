@@ -1,0 +1,25 @@
+{
+  "name": "Whisper Room — B.Sc.",
+  "short_name": "WhisperRoom",
+  "description": "Anonymous confessions board for B.Sc. CS batch",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#121212",
+  "theme_color": "#E53935",
+  "categories": ["social", "education"],
+  "icons": [
+    {
+      "src": "/static/icons/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/icons/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

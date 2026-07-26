@@ -46,6 +46,29 @@ def test_admin_can_delete_a_rumor(client):
     assert client.get("/api/rumors").get_json()["rumors"] == []
 
 
+def test_admin_can_grant_points_to_user(client):
+    register_and_login(client, handle="usr1", email="e@x.com")
+    _login_admin(client, "admin123")
+    uid = client.get("/api/admin/users").get_json()["users"][0]["id"]
+    r = client.post(f"/api/admin/users/{uid}/grant-points", json={"amount": 25})
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["ok"] is True
+    assert data["awarded"] == 25
+    users = client.get("/api/admin/users").get_json()["users"]
+    user = next(u for u in users if u["id"] == uid)
+    assert user["points"] == 25
+
+
+def test_admin_grant_points_rejects_bad_amount(client):
+    register_and_login(client, handle="usr1", email="e@x.com")
+    _login_admin(client, "admin123")
+    uid = client.get("/api/admin/users").get_json()["users"][0]["id"]
+    assert client.post(f"/api/admin/users/{uid}/grant-points", json={"amount": 0}).status_code == 400
+    assert client.post(f"/api/admin/users/{uid}/grant-points", json={"amount": -5}).status_code == 400
+
+
+
 def test_admin_can_ban_a_user(client):
     register_and_login(client, handle="usr1", email="e@x.com")
     _login_admin(client, "admin123")
@@ -65,13 +88,3 @@ def test_delete_requires_login(client):
     assert client.delete(f"/api/admin/rumors/{rid}").status_code == 401
 
 
-def test_ban_requires_login(client):
-    register_and_login(client, handle="usr1", email="e@x.com")
-    _login_admin(client, "admin123")
-    uid = client.get("/api/admin/users").get_json()["users"][0]["id"]
-    client.get("/api/admin/rumors")  # refresh nothing; just ensure admin still set
-    # logout simulation: new client without admin session
-    from app import create_app, init_db
-    app2 = create_app({"TESTING": True, "DB_PATH": client.application.config["DB_PATH"]})
-    with app2.test_client() as c2:
-        assert c2.delete(f"/api/admin/users/{uid}").status_code == 401

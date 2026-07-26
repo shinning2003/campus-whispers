@@ -52,8 +52,6 @@ def test_digest_injects_sender_and_reports_counts(client):
     # register + post
     _post(client, "aaa", "winner@x.com", "top secret of the day")
     _post(client, "bbb", "reader@x.com", "another whisper")
-    # give the first one engagement so it ranks
-    client.post("/api/rumors/1/react", json={"kind": "fire"})
     client.post("/api/admin/login", json={"password": "admin123"})
     r = client.post("/api/admin/digest/send", json={})
     assert r.status_code == 200

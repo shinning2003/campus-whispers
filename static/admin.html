@@ -2,47 +2,69 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Campus Whispers — Admin</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Whisper Room — Admin</title>
   <style>
-    :root { --bg:#0f1226; --card:#1a1f3d; --accent:#ff5c7c; --text:#e8e9f2; --muted:#9aa0c7; }
-    * { box-sizing: border-box; }
-    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-           background: var(--bg); color: var(--text); min-height:100vh; }
-    header { text-align:center; padding: 32px 16px 8px; }
-    h1 { margin:0; }
-    .sub { color: var(--muted); font-size:.85rem; margin-top:6px; }
-    .wrap { max-width: 820px; margin: 0 auto; padding: 0 16px 60px; }
-    .card { background: var(--card); border-radius: 14px; padding: 18px; margin: 16px 0; }
-    input { width:100%; padding: 11px; border-radius: 10px; border:1px solid #2c3361;
-            background:#12152e; color: var(--text); font-size:1rem; }
-    button { margin-top: 12px; background: var(--accent); color:#fff; border:0;
-             padding: 10px 18px; border-radius: 10px; font-size:1rem; cursor:pointer; }
-    button:hover { filter: brightness(1.08); }
-    .msg { color: var(--muted); font-size:.85rem; margin-top:8px; min-height:1em; }
-    .rumor { background:#12152e; border-radius: 10px; padding: 12px 14px; margin: 10px 0;
-             display:flex; justify-content: space-between; align-items:flex-start; gap:12px; }
-    .rumor .body { flex:1; }
-    .rumor .meta { color: var(--muted); font-size:.75rem; margin-top:6px; }
-    .id { color:#ff9db1; }
-    .del { background:#3a2030; color:#ff8da3; border:1px solid #5a2c40; padding:6px 12px; }
-    .ban { background:#3a2030; color:#ff8da3; border:1px solid #5a2c40; padding:6px 12px; }
-    .del:hover, .ban:hover { background:#4a2436; }
-    .hidden { display:none; }
-    .tabs { text-align:center; margin:10px 0; }
-    .tab { color: var(--muted); cursor:pointer; margin:0 8px; }
-    .tab.active { color: var(--text); font-weight:600; }
-    a { color: var(--muted); }
-    .foot { text-align:center; color: var(--muted); font-size:.8rem; padding: 24px 16px 40px; }
-    @media (max-width: 520px) {
-      h1 { font-size: 1.5rem; }
-      .wrap { padding: 0 10px 40px; }
+    :root {
+      --bg-dark: #0D0D0D;
+      --bg-surface: #1A1A1A;
+      --bg-card: #1E1E1E;
+      --bg-elevated: #252525;
+      --bg-input: #2A2A2A;
+      --accent: #E53935;
+      --accent-hover: #C62828;
+      --text: #FFFFFF;
+      --text-secondary: #AAAAAA;
+      --text-muted: #888888;
+      --border: #333333;
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 18px;
     }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, var(--bg-dark) 0%, var(--bg-surface) 100%);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    .wrap { max-width: 680px; margin: 0 auto; padding: 0 16px 60px; }
+    header { text-align: center; padding: 40px 16px 12px; }
+    h1 { margin: 0; font-size: 1.5rem; }
+    .sub { color: var(--text-muted); font-size: .85rem; margin-top: 4px; }
+    .card { background: var(--bg-card); border-radius: var(--radius-md); padding: 18px; margin: 16px 0; }
+    input { width: 100%; padding: 11px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+            background: var(--bg-input); color: var(--text); font-size: 1rem; outline: none; }
+    input:focus { border-color: var(--accent); }
+    button { margin-top: 12px; background: var(--accent); color: #fff; border: 0;
+             padding: 10px 18px; border-radius: var(--radius-sm); font-size: 1rem; cursor: pointer; }
+    button:active { transform: scale(0.98); }
+    .msg { color: var(--text-muted); font-size: .85rem; margin-top: 8px; min-height: 1em; }
+    .item { background: var(--bg-elevated); border-radius: var(--radius-sm); padding: 12px 14px; margin: 10px 0;
+            display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+    .item .body { flex: 1; }
+    .item .meta { color: var(--text-muted); font-size: .75rem; margin-top: 6px; }
+    .id { color: var(--accent); opacity: .8; }
+    .del, .ban { background: #3a1a1a; color: var(--accent); border: 1px solid #5a2a2a; padding: 6px 14px; font-size: .85rem; }
+    .give { background: #1f4a2e; color: #8ef0b0; border: 1px solid #235e37; padding: 6px 14px; font-size: .85rem; }
+    .give:hover { background: #245a35; }
+    .hidden { display: none; }
+    .tabs { display: flex; gap: 0; border-bottom: 2px solid var(--border); margin-bottom: 12px; }
+    .tabs button { flex: 1; margin: 0; padding: 10px; border-radius: 0; background: transparent;
+                   color: var(--text-muted); font-size: .9rem; border-bottom: 2px solid transparent;
+                   margin-bottom: -2px; cursor: pointer; }
+    .tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
+    a { color: var(--text-muted); text-decoration: none; font-size: .85rem; display: inline-block; margin-top: 8px; }
+    a:hover { color: var(--text-secondary); }
+    .foot { text-align: center; color: var(--text-dim); font-size: .8rem; padding: 24px 16px 40px; }
+    .handle { color: var(--accent); font-weight: 600; }
   </style>
 </head>
 <body>
   <header>
-    <h1>Campus Whispers — Admin</h1>
+    <h1>Whisper Room — Admin</h1>
     <div class="sub">You see real names & handles. Ban anyone who misbehaves.</div>
   </header>
   <main class="wrap">
@@ -54,15 +76,15 @@
 
     <div class="card hidden" id="dashCard">
       <div class="tabs">
-        <span class="tab active" id="tabRumors">Rumors</span>
-        <span class="tab" id="tabUsers">Users</span>
+        <button id="tabRumors" class="active">Rumors</button>
+        <button id="tabUsers">Users</button>
       </div>
       <div id="list"></div>
       <div id="userList" class="hidden"></div>
-      <a href="/">← Back to public board</a>
+      <a href="/">← Back to board</a>
     </div>
   </main>
-  <footer class="foot">Campus Whispers &middot; Admin only.</footer>
+  <footer class="foot">Whisper Room — B.Sc. &middot; Admin only.</footer>
 
   <script>
     const $ = id => document.getElementById(id);
@@ -72,7 +94,7 @@
     $('login').onclick = async () => {
       const r = await api('POST','/api/admin/login',{password:$('pw').value});
       if (r.ok){ $('loginCard').classList.add('hidden'); $('dashCard').classList.remove('hidden'); loadRumors(); loadUsers(); }
-      else $('loginMsg').textContent = 'Wrong password.';
+      else { $('loginMsg').textContent = 'Wrong password.'; }
     };
 
     $('tabRumors').onclick = () => { $('tabRumors').classList.add('active'); $('tabUsers').classList.remove('active'); $('list').classList.remove('hidden'); $('userList').classList.add('hidden'); };
@@ -84,12 +106,10 @@
       $('list').innerHTML = '';
       if (!data.rumors || !data.rumors.length) { $('list').innerHTML='<p class="msg">No whispers stored.</p>'; return; }
       for (const x of data.rumors) {
-        const d = document.createElement('div'); d.className='rumor';
+        const d = document.createElement('div'); d.className='item';
         d.innerHTML = `<div class="body">
           <div>${esc(x.text)}</div>
-          <div class="meta">#${x.id} · <span class="handle">@${esc(x.handle)}</span> ·
-            <span class="id">${esc(x.real_name)}</span> ·
-            ${new Date(x.created_at).toLocaleString()}</div></div>`;
+          <div class="meta"><span class="id">#${x.id}</span> · <span class="handle">@${esc(x.handle)}</span> · <span class="id">${esc(x.real_name)}</span> · ${new Date(x.created_at).toLocaleString()}</div></div>`;
         const b=document.createElement('button'); b.className='del'; b.textContent='Delete';
         b.onclick=async()=>{ await api('DELETE','/api/admin/rumors/'+x.id); loadRumors(); };
         d.appendChild(b); $('list').appendChild(d);
@@ -99,18 +119,30 @@
     async function loadUsers() {
       const r = await api('GET','/api/admin/users');
       const data = await r.json();
-      $('userList').innerHTML='';
+      $('userList').innerHTML = '';
       if (!data.users || !data.users.length) { $('userList').innerHTML='<p class="msg">No users.</p>'; return; }
       for (const u of data.users) {
-        const d=document.createElement('div'); d.className='rumor';
-        d.innerHTML=`<div class="body"><div><span class="handle">@${esc(u.handle)}</span>
-          ${u.banned?'<span class="id">[BANNED]</span>':''}</div>
-          <div class="meta"><span class="id">${esc(u.real_name)}</span></div></div>`;
+        const d=document.createElement('div'); d.className='item';
+        d.innerHTML=`<div class="body"><div><span class="handle">@${esc(u.handle)}</span>${u.banned?' <span class="id">[BANNED]</span>':''}</div>
+          <div class="meta"><span class="id">${esc(u.real_name)}</span> · ${esc(u.email)} · ⭐ ${u.points || 0} pts</div></div>`;
+        const btns = document.createElement('div');
         if (!u.banned) {
+          const g=document.createElement('button'); g.className='give'; g.textContent='Give points';
+          g.onclick=async()=>{
+            const amt = prompt('How many points to give @' + u.handle + '?', '10');
+            if (amt === null) return;
+            const n = parseInt(amt, 10);
+            if (!Number.isFinite(n) || n <= 0) { alert('Enter a positive number.'); return; }
+            const rr = await api('POST', '/api/admin/users/' + u.id + '/grant-points', { amount: n });
+            if (rr.ok) { await loadUsers(); }
+            else { const e = await rr.json(); alert(e.error || 'Could not grant points'); }
+          };
+          btns.appendChild(g);
           const b=document.createElement('button'); b.className='ban'; b.textContent='Ban & remove';
           b.onclick=async()=>{ if(confirm('Ban '+u.real_name+'? All their posts will be deleted.')){ await api('DELETE','/api/admin/users/'+u.id); loadUsers(); loadRumors(); } };
-          d.appendChild(b);
+          btns.appendChild(b);
         }
+        d.appendChild(btns);
         $('userList').appendChild(d);
       }
     }

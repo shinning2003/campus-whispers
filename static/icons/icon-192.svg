@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <rect width="192" height="192" rx="36" fill="#121212"/>
+  <rect x="8" y="8" width="176" height="176" rx="28" fill="#1A1A1A" stroke="#E53935" stroke-width="4"/>
+  <g transform="translate(96,88)">
+    <!-- Chat bubble -->
+    <path d="M-32,-28 L32,-28 C36.4,-28 40,-24.4 40,-20 L40,12 C40,16.4 36.4,20 32,20 L-8,20 L-24,36 L-24,20 L-32,20 C-36.4,20 -40,16.4 -40,12 L-40,-20 C-40,-24.4 -36.4,-28 -32,-28Z" fill="#E53935"/>
+    <!-- Ellipsis dots -->
+    <circle cx="-12" cy="-4" r="4" fill="#FFFFFF"/>
+    <circle cx="0" cy="-4" r="4" fill="#FFFFFF"/>
+    <circle cx="12" cy="-4" r="4" fill="#FFFFFF"/>
+  </g>
+</svg>
