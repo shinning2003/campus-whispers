@@ -242,6 +242,33 @@ header {
 .profile-card .p-stats { display:flex; justify-content:center; gap:16px; margin:12px 0; font-size:13px; }
 
 @media(max-width:520px){ header { padding:8px 12px; } #feedWrap { padding:6px 12px; } }
+
+/* ===== QUESTION OVERLAY ===== */
+#questionOverlay {
+  position:fixed; inset:0; z-index:100; background:var(--bg);
+  display:flex; align-items:center; justify-content:center;
+}
+#questionOverlay.hidden { display:none; }
+.question-box {
+  background:var(--surface); border:1px solid var(--border); border-radius:16px;
+  padding:28px 24px; max-width:360px; width:90%;
+}
+.question-box h2 { font-size:17px; margin-bottom:4px; }
+.question-box .q-text { font-size:15px; color:var(--text); margin:12px 0; line-height:1.5; }
+.question-box textarea {
+  width:100%; border-radius:var(--radius-md); border:1px solid var(--border);
+  background:var(--bg-input); color:var(--text); padding:10px 12px;
+  font-size:14px; font-family:inherit; outline:none; resize:vertical;
+  min-height:60px; box-sizing:border-box;
+}
+.question-box textarea:focus { border-color:var(--accent); }
+.question-box .q-btn {
+  width:100%; height:40px; border-radius:var(--radius-md); background:var(--accent);
+  color:#fff; border:none; font-size:13px; font-weight:600; cursor:pointer; margin-top:10px;
+}
+.question-box .q-btn:disabled { opacity:0.5; cursor:default; }
+.question-box .q-err { font-size:11px; color:#ef4444; min-height:1em; margin-top:6px; }
+.question-box .q-note { font-size:11px; color:var(--text-dim); margin-bottom:10px; }
 </style>
 </head>
 <body>
@@ -267,6 +294,18 @@ header {
     <div class="auth-err" id="regErr"></div>
     <button class="auth-btn" id="regBtn">Register</button>
     <span class="auth-link" id="showLogin">Already have an account? Login</span>
+  </div>
+</div>
+
+<!-- Question prompt overlay -->
+<div id="questionOverlay" class="hidden">
+  <div class="question-box">
+    <h2>📋 Answer Required</h2>
+    <p class="q-note">The admin has a question for you before you can proceed.</p>
+    <div class="q-text" id="questionText"></div>
+    <textarea id="questionAnswer" placeholder="Type your answer..." maxlength="1000"></textarea>
+    <button class="q-btn" id="submitAnswer">Submit Answer</button>
+    <div class="q-err" id="questionErr"></div>
   </div>
 </div>
 
@@ -381,7 +420,7 @@ $('showLogin').onclick = () => { $('regBox').classList.add('hidden'); $('loginBo
 $('loginBtn').onclick = async () => {
   const r = await api('POST', '/api/login', { identifier: $('loginId').value.trim(), password: $('loginPw').value });
   const j = await r.json();
-  if (r.ok) { localStorage.setItem('cw_logged','1'); $('loginErr').textContent = ''; currentUserId = j.user_id || null; updateUI(); loadFeed(); }
+  if (r.ok) { localStorage.setItem('cw_logged','1'); $('loginErr').textContent = ''; currentUserId = j.user_id || null; updateUI(); checkPendingQuestion(); }
   else $('loginErr').textContent = j.error;
 };
 $('regBtn').onclick = async () => {
@@ -648,6 +687,59 @@ function updateUI() {
   if (logged) { switchPanel('feed'); loadFeed(); loadRewards(); }
 }
 
+/* ===== QUESTION PROMPT ===== */
+let answering = false;
+let pendingQuestionId = null;
+
+async function checkPendingQuestion() {
+  if (!isLogged()) return;
+  try {
+    const r = await api('GET', '/api/questions/pending');
+    if (!r.ok) return;
+    const data = await r.json();
+    if (data.question) {
+      pendingQuestionId = data.question.id;
+      $('questionText').textContent = data.question.text;
+      $('questionAnswer').value = '';
+      $('questionErr').textContent = '';
+      $('submitAnswer').disabled = false;
+      $('questionOverlay').classList.remove('hidden');
+    } else {
+      pendingQuestionId = null;
+      $('questionOverlay').classList.add('hidden');
+    }
+  } catch(e) {
+    // Silently fail — app works normally
+  }
+}
+
+$('submitAnswer').onclick = async function() {
+  if (answering) return;
+  const answer = $('questionAnswer').value.trim();
+  if (!answer) { $('questionErr').textContent = 'Please type an answer.'; return; }
+  answering = true;
+  $('submitAnswer').disabled = true;
+  try {
+    const r = await api('POST', '/api/questions/' + pendingQuestionId + '/answer', { answer });
+    if (r.ok) {
+      $('questionOverlay').classList.add('hidden');
+      pendingQuestionId = null;
+      updateUI();
+      loadFeed();
+      loadRewards();
+    } else {
+      const j = await r.json();
+      $('questionErr').textContent = j.error || 'Failed to submit answer.';
+      $('submitAnswer').disabled = false;
+    }
+  } catch(e) {
+    $('questionErr').textContent = 'Failed to submit answer.';
+    $('submitAnswer').disabled = false;
+  } finally {
+    answering = false;
+  }
+};
+
 /* ===== INIT ===== */
 document.addEventListener('keydown', function(e) { if (e.key === 'Enter') { var f = document.activeElement; if (f && f.id === 'composeInput') { e.preventDefault(); postWhisper(); } } });
 (async function() {
@@ -668,6 +760,7 @@ document.addEventListener('keydown', function(e) { if (e.key === 'Enter') { var 
     }
   }
   updateUI();
+  checkPendingQuestion();
 })();
 </script>
   <script>

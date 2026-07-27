@@ -739,6 +739,122 @@ def create_app(config=None):
         conn.close()
         return jsonify({"ok": True, "banned": uid})
 
+    # === Admin: Questions ===
+    @app.get("/api/admin/questions")
+    def admin_list_questions():
+        if not session.get("admin"):
+            return jsonify({"error": "Unauthorized."}), 401
+        conn = get_db()
+        rows = exec(conn,
+            "SELECT q.id, q.question_text, q.created_at, q.active, "
+            "(SELECT COUNT(*) FROM question_answers WHERE question_id=q.id) AS answer_count "
+            "FROM questions q ORDER BY q.id DESC"
+        ).fetchall()
+        conn.close()
+        return jsonify({"questions": [dict(r) for r in rows]})
+
+    @app.post("/api/admin/questions")
+    def admin_create_question():
+        if not session.get("admin"):
+            return jsonify({"error": "Unauthorized."}), 401
+        p = request.get_json(silent=True) or {}
+        text = (p.get("text") or "").strip()
+        if not text:
+            return jsonify({"error": "Question text required."}), 400
+        now = datetime.now(timezone.utc).isoformat()
+        conn = get_db()
+        # Deactivate any previously active questions
+        exec(conn, "UPDATE questions SET active=0 WHERE active=1")
+        # Insert the new question
+        import psycopg
+        is_pg = isinstance(conn, psycopg.Connection)
+        if is_pg:
+            cur = exec(conn,
+                "INSERT INTO questions (question_text, created_at, active) VALUES (?,?,1) RETURNING id",
+                (text, now))
+            conn.commit()
+            qid = cur.fetchone()["id"]
+        else:
+            cur = exec(conn,
+                "INSERT INTO questions (question_text, created_at, active) VALUES (?,?,1)",
+                (text, now))
+            conn.commit()
+            qid = cur.lastrowid
+        conn.close()
+        return jsonify({"ok": True, "id": qid}), 201
+
+    @app.delete("/api/admin/questions/<int:qid>")
+    def admin_delete_question(qid):
+        if not session.get("admin"):
+            return jsonify({"error": "Unauthorized."}), 401
+        conn = get_db()
+        exec(conn, "DELETE FROM question_answers WHERE question_id=?", (qid,))
+        exec(conn, "DELETE FROM questions WHERE id=?", (qid,))
+        conn.commit()
+        conn.close()
+        return jsonify({"ok": True, "deleted": qid})
+
+    # === User-facing: Questions ===
+    @app.get("/api/questions/pending")
+    def get_pending_question():
+        """Return the active unanswered question for the current user, or null."""
+        if not session.get("user_id"):
+            return jsonify({"error": "Login required."}), 401
+        conn = get_db()
+        uid = session["user_id"]
+        # Find the most recent active question
+        q = exec(conn,
+            "SELECT id, question_text, created_at FROM questions WHERE active=1 "
+            "ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        if not q:
+            conn.close()
+            return jsonify({"question": None})
+        # Check if user already answered it
+        answered = exec(conn,
+            "SELECT 1 FROM question_answers WHERE question_id=? AND user_id=?",
+            (q["id"], uid)).fetchone()
+        conn.close()
+        if answered:
+            return jsonify({"question": None})
+        return jsonify({
+            "question": {
+                "id": q["id"],
+                "text": q["question_text"],
+                "created_at": q["created_at"],
+            }
+        })
+
+    @app.post("/api/questions/<int:qid>/answer")
+    def answer_question(qid):
+        if not session.get("user_id"):
+            return jsonify({"error": "Login required."}), 401
+        p = request.get_json(silent=True) or {}
+        answer = (p.get("answer") or "").strip()
+        if not answer:
+            return jsonify({"error": "Answer text required."}), 400
+        conn = get_db()
+        uid = session["user_id"]
+        # Verify question exists and is active
+        q = exec(conn, "SELECT id FROM questions WHERE id=? AND active=1", (qid,)).fetchone()
+        if not q:
+            conn.close()
+            return jsonify({"error": "Question not found or inactive."}), 404
+        # Check not already answered
+        already = exec(conn,
+            "SELECT 1 FROM question_answers WHERE question_id=? AND user_id=?",
+            (qid, uid)).fetchone()
+        if already:
+            conn.close()
+            return jsonify({"error": "Already answered."}), 400
+        now = datetime.now(timezone.utc).isoformat()
+        exec(conn,
+            "INSERT INTO question_answers (question_id, user_id, answer_text, answered_at) VALUES (?,?,?,?)",
+            (qid, uid, answer, now))
+        conn.commit()
+        conn.close()
+        return jsonify({"ok": True, "answered": qid}), 201
+
     @app.get("/")
     def index():
         return serve_page("index.html")
@@ -1211,6 +1327,25 @@ def init_db(db_path=None):
             conn.execute("ALTER TABLE users ADD COLUMN selected_badge TEXT DEFAULT NULL")
         except Exception:
             pass
+        # Admin questions feature
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS questions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                question_text TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                active INTEGER NOT NULL DEFAULT 1
+            )"""
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS question_answers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                question_id INTEGER NOT NULL REFERENCES questions(id),
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                answer_text TEXT NOT NULL,
+                answered_at TEXT NOT NULL,
+                UNIQUE(question_id, user_id)
+            )"""
+        )
     else:  # Postgres (Supabase)
         conn.execute(
             """CREATE TABLE IF NOT EXISTS users (
@@ -1327,6 +1462,25 @@ def init_db(db_path=None):
                 meta TEXT,
                 created_at TEXT NOT NULL,
                 expires_at TEXT
+            )"""
+        )
+        # Admin questions feature (Postgres)
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS questions (
+                id SERIAL PRIMARY KEY,
+                question_text TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                active INTEGER NOT NULL DEFAULT 1
+            )"""
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS question_answers (
+                id SERIAL PRIMARY KEY,
+                question_id INTEGER NOT NULL REFERENCES questions(id),
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                answer_text TEXT NOT NULL,
+                answered_at TEXT NOT NULL,
+                UNIQUE(question_id, user_id)
             )"""
         )
     conn.commit()
