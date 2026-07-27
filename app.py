@@ -851,7 +851,22 @@ def create_app(config=None):
         exec(conn,
             "INSERT INTO question_answers (question_id, user_id, answer_text, answered_at) VALUES (?,?,?,?)",
             (qid, uid, answer, now))
-        conn.commit()
+        # Also post the answer as a rumor in the feed so everyone can see it
+        q_text = exec(conn, "SELECT question_text FROM questions WHERE id=?", (qid,)).fetchone()
+        question_text = q_text["question_text"] if q_text else "Question"
+        rumor_text = f"📋 Q: {question_text}\n\n💬 A: {answer}"
+        import psycopg
+        is_pg = isinstance(conn, psycopg.Connection)
+        if is_pg:
+            cur = exec(conn,
+                "INSERT INTO rumors (user_id, text, created_at) VALUES (?,?,?) RETURNING id",
+                (uid, rumor_text, now))
+            conn.commit()
+        else:
+            exec(conn,
+                "INSERT INTO rumors (user_id, text, created_at) VALUES (?,?,?)",
+                (uid, rumor_text, now))
+            conn.commit()
         conn.close()
         return jsonify({"ok": True, "answered": qid}), 201
 
