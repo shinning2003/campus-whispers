@@ -139,6 +139,8 @@ def create_app(config=None):
 
     @app.get("/api/rumors")
     def list_rumors():
+        if not session.get("user_id"):
+            return jsonify({"error": "Login required."}), 401
         sort = (request.args.get("sort") or "new").strip().lower()
         tag = (request.args.get("tag") or "").strip().lower()
         filt = (request.args.get("filter") or "").strip().lower()

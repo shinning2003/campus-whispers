@@ -7,8 +7,6 @@
 <meta http-equiv="Pragma" content="no-cache" />
 <meta http-equiv="Expires" content="0" />
 <title>Whisper Room — B.Sc.</title>
-  <link rel="manifest" href="/static/manifest.json" />
-  <link rel="apple-touch-icon" href="/static/icons/icon-192.svg" />
 <style>
 :root {
   --bg:#0a0f1a; --surface:#111827; --card:#1a2332; --elevated:#1e293b;
@@ -450,7 +448,7 @@ async function loadFeed(forceBottom = false) {
       const tags = (x.tags || []).map(t => '<span class="card-tag">#' + esc(t) + '</span>').join('');
       const highlighted = x.highlighted ? ' highlighted' : '';
       const handle = esc(x.handle || 'Anonymous');
-      const displayHandle = currentUserId ? (x.user_id === currentUserId ? 'You' : 'Anonymous') : 'Anonymous';
+      const displayHandle = currentUserId ? (x.user_id === currentUserId ? 'You' : 'Anonymous') : handle;
       const badgeHtml = x.badge_label ? ' <span class="card-badge">\uD83C\uDFC5 ' + esc(x.badge_label) + '</span>' : '';
       return '<div class="whisper-card' + highlighted + '">' +
         '<div class="card-head"><span class="card-name">' + displayHandle + bumped + feat + '</span><span class="card-time">' + fmtTime(x.created_at) + '</span></div>' +
@@ -650,30 +648,7 @@ function updateUI() {
 
 /* ===== INIT ===== */
 document.addEventListener('keydown', function(e) { if (e.key === 'Enter') { var f = document.activeElement; if (f && f.id === 'composeInput') { e.preventDefault(); postWhisper(); } } });
-(async function() {
-  // If localStorage says we're logged in, verify the server session is still valid
-  if (isLogged()) {
-    try {
-      const r = await api('GET', '/api/me');
-      if (!r.ok) {
-        localStorage.removeItem('cw_logged');
-        currentUserId = null;
-      } else {
-        const me = await r.json();
-        currentUserId = me.user_id || null;
-      }
-    } catch(e) {
-      localStorage.removeItem('cw_logged');
-      currentUserId = null;
-    }
-  }
-  updateUI();
-})();
+updateUI();
 </script>
-  <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/static/service-worker.js').catch(() => {});
-    }
-  </script>
 </body>
 </html>
