@@ -806,6 +806,7 @@ $('bannerSubmit').onclick = async function() {
   }
 };
 
+(async function() {
 /* ===== UI STATE ===== */
     try {
       const r = await api('GET', '/api/me');
@@ -820,7 +821,6 @@ $('bannerSubmit').onclick = async function() {
       localStorage.removeItem('cw_logged');
       currentUserId = null;
     }
-  }
   updateUI();
   checkPendingQuestion();
 })();
