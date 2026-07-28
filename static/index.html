@@ -9,6 +9,7 @@
 <title>Whisper Room — B.Sc.</title>
   <link rel="manifest" href="/static/manifest.json" />
   <link rel="apple-touch-icon" href="/static/icons/icon-192.svg" />
+  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
 <style>
 :root {
   --bg:#0a0f1a; --surface:#111827; --card:#1a2332; --elevated:#1e293b;
@@ -806,13 +807,69 @@ $('bannerSubmit').onclick = async function() {
   }
 };
 
-/* ===== POLLING ===== */
+/* ===== SOCKET.IO (live updates) ===== */
+let socket = null;
+
+function connectSocket() {
+  if (socket && socket.connected) return;
+  socket = io(window.location.origin, { transports: ['websocket', 'polling'] });
+
+  socket.on('connect', () => {
+    console.log('[ws] connected');
+  });
+
+  socket.on('new_question', (data) => {
+    // Show question banner immediately without waiting for poll
+    pendingQuestionId = data.id;
+    $('bannerQuestionText').textContent = data.text;
+    $('bannerAnswer').value = '';
+    $('bannerErr').textContent = '';
+    $('bannerSubmit').disabled = false;
+    $('questionBanner').classList.remove('hidden');
+    $('composeRow').style.opacity = '0.5';
+    $('composeRow').style.pointerEvents = 'none';
+    $('sendBtn').disabled = true;
+  });
+
+  socket.on('question_answered', (data) => {
+    // Hide banner, re-enable compose
+    $('questionBanner').classList.add('hidden');
+    pendingQuestionId = null;
+    $('composeRow').style.opacity = '1';
+    $('composeRow').style.pointerEvents = 'auto';
+    $('sendBtn').disabled = false;
+    loadFeed();
+  });
+
+  socket.on('points_update', (data) => {
+    // Update header points/rank instantly
+    $('statPoints').textContent = data.points || 0;
+    // Also refresh rank via /api/me (rank is computed)
+    api('GET', '/api/me').then(r => {
+      if (r.ok) r.json().then(me => {
+        $('statRank').textContent = me.rank || '—';
+        const rp = $('statRwdPoints'); if (rp) rp.textContent = me.points || 0;
+        const rr = $('statRwdRank'); if (rr) rr.textContent = me.rank || '—';
+      });
+    }).catch(() => {});
+  });
+
+  socket.on('new_rumor', () => {
+    loadFeed();
+  });
+
+  socket.on('disconnect', () => {
+    console.log('[ws] disconnected — will poll as fallback');
+  });
+}
+
+/* ===== POLLING (fallback when Socket.IO unavailable) ===== */
 let pollTimer = null;
 function startPolling() {
   if (pollTimer) return;
   pollTimer = setInterval(async () => {
     if (!isLogged()) return;
-    // 1. Refresh points/rank in header
+    // Refresh points/rank in header
     try {
       const r = await api('GET', '/api/me');
       if (r.ok) {
@@ -822,7 +879,7 @@ function startPolling() {
         currentUserId = me.user_id || null;
       }
     } catch(e) {}
-    // 2. Check for new admin questions (only if no active pending question)
+    // Check for new admin questions (only if no active pending question)
     if (!document.getElementById('questionBanner').classList.contains('hidden')) return;
     try {
       const r = await api('GET', '/api/questions/pending');
@@ -841,7 +898,7 @@ function startPolling() {
         }
       }
     } catch(e) {}
-  }, 15000);
+  }, 30000); // slower fallback (30s)
 }
 
 (async function() {
@@ -862,6 +919,7 @@ function startPolling() {
   updateUI();
   checkPendingQuestion();
   startPolling();
+  connectSocket();
 })();
 </script>
   <script>
