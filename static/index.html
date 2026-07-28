@@ -243,32 +243,77 @@ header {
 
 @media(max-width:520px){ header { padding:8px 12px; } #feedWrap { padding:6px 12px; } }
 
-/* ===== QUESTION OVERLAY ===== */
-#questionOverlay {
-  position:fixed; inset:0; z-index:100; background:var(--bg);
-  display:flex; align-items:center; justify-content:center;
+/* ===== QUESTION BANNER (inline in feed) ===== */
+#questionBanner {
+  position: relative;
+  z-index: 5;
+  margin: 8px 0 16px 0;
 }
-#questionOverlay.hidden { display:none; }
-.question-box {
-  background:var(--surface); border:1px solid var(--border); border-radius:16px;
-  padding:28px 24px; max-width:360px; width:90%;
+.question-banner {
+  display: flex;
+  gap: 12px;
+  align-items: flex-shrink: 0 flex-start;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
 }
-.question-box h2 { font-size:17px; margin-bottom:4px; }
-.question-box .q-text { font-size:15px; color:var(--text); margin:12px 0; line-height:1.5; }
-.question-box textarea {
-  width:100%; border-radius:var(--radius-md); border:1px solid var(--border);
-  background:var(--bg-input); color:var(--text); padding:10px 12px;
-  font-size:14px; font-family:inherit; outline:none; resize:vertical;
-  min-height:60px; box-sizing:border-box;
+.q-icon {
+  font-size: 24px;
+  min-width: 28px;
+  text-align: center;
+  color: var(--accent);
 }
-.question-box textarea:focus { border-color:var(--accent); }
-.question-box .q-btn {
-  width:100%; height:40px; border-radius:var(--radius-md); background:var(--accent);
-  color:#fff; border:none; font-size:13px; font-weight:600; cursor:pointer; margin-top:10px;
+.q-content {
+  flex: 1;
+  min-width: 0;
 }
-.question-box .q-btn:disabled { opacity:0.5; cursor:default; }
-.question-box .q-err { font-size:11px; color:#ef4444; min-height:1em; margin-top:6px; }
-.question-box .q-note { font-size:11px; color:var(--text-dim); margin-bottom:10px; }
+.q-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+.q-text {
+  font-size: 14px;
+  color: var(--text);
+  line-height: 1.5;
+  margin-bottom: 12px;
+  word-break: break-word;
+}
+.q-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+#bannerAnswer {
+  width: 100%;
+  min-height: 60px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  resize: vertical;
+  box-sizing: border-box;
+}
+#bannerAnswer:focus { border-color: var(--accent); }
+#bannerSubmit {
+  align-self: flex-start;
+  width: auto;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.q-err {
+  font-size: 11px;
+  color: #ef4444;
+  min-height: 1.2em;
+  margin-top: 4px;
+}
 </style>
 </head>
 <body>
@@ -295,19 +340,7 @@ header {
     <button class="auth-btn" id="regBtn">Register</button>
     <span class="auth-link" id="showLogin">Already have an account? Login</span>
   </div>
-</div>
-
-<!-- Question prompt overlay -->
-<div id="questionOverlay" class="hidden">
-  <div class="question-box">
-    <h2>📋 Answer Required</h2>
-    <p class="q-note">The admin has a question for you before you can proceed.</p>
-    <div class="q-text" id="questionText"></div>
-    <textarea id="questionAnswer" placeholder="Type your answer..." maxlength="1000"></textarea>
-    <button class="q-btn" id="submitAnswer">Submit Answer</button>
-    <div class="q-err" id="questionErr"></div>
-  </div>
-</div>
+</div></div>
 
 <!-- Header -->
 <header id="mainHeader" class="hidden">
@@ -331,7 +364,23 @@ header {
 
 <main id="contentArea" style="flex:1; min-height:0; display:flex; flex-direction:column; overflow:hidden;">
 <!-- Feed -->
-<div class="panel" id="feedWrap"></div>
+<div class="panel" id="feedWrap">
+<!-- Question banner (shown when a pending question exists) -->
+<div id="questionBanner" class="hidden">
+  <div class="question-banner">
+    <div class="q-icon">📋</div>
+    <div class="q-content">
+      <div class="q-title">Admin Question</div>
+      <div class="q-text" id="bannerQuestionText"></div>
+    </div>
+    <div class="q-actions">
+      <textarea id="bannerAnswer" placeholder="Type your answer..." maxlength="1000"></textarea>
+      <button class="q-btn" id="bannerSubmit">Submit Answer</button>
+      <div class="q-err" id="bannerErr"></div>
+    </div>
+  </div>
+</div>
+</div>
 
 <!-- Rewards Panel -->
 <div class="panel" id="rewardsPanel">
@@ -687,7 +736,7 @@ function updateUI() {
   if (logged) { switchPanel('feed'); loadFeed(); loadRewards(); }
 }
 
-/* ===== QUESTION PROMPT ===== */
+/* ===== QUESTION BANNER ===== */
 let answering = false;
 let pendingQuestionId = null;
 
@@ -699,52 +748,65 @@ async function checkPendingQuestion() {
     const data = await r.json();
     if (data.question) {
       pendingQuestionId = data.question.id;
-      $('questionText').textContent = data.question.text;
-      $('questionAnswer').value = '';
-      $('questionErr').textContent = '';
-      $('submitAnswer').disabled = false;
-      $('questionOverlay').classList.remove('hidden');
+      $('bannerQuestionText').textContent = data.question.text;
+      $('bannerAnswer').value = '';
+      $('bannerErr').textContent = '';
+      $('bannerSubmit').disabled = false;
+      $('questionBanner').classList.remove('hidden');
+      // Disable compose bar until answered
+      $('composeRow').style.opacity = '0.5';
+      $('composeRow').style.pointerEvents = 'none';
+      $('sendBtn').disabled = true;
     } else {
       pendingQuestionId = null;
-      $('questionOverlay').classList.add('hidden');
+      $('questionBanner').classList.add('hidden');
+      // Re-enable compose bar
+      $('composeRow').style.opacity = '1';
+      $('composeRow').style.pointerEvents = 'auto';
+      $('sendBtn').disabled = false;
     }
   } catch(e) {
     // Silently fail — app works normally
+    $('questionBanner').classList.add('hidden');
+    $('composeRow').style.opacity = '1';
+    $('composeRow').style.pointerEvents = 'auto';
+    $('sendBtn').disabled = false;
   }
 }
 
-$('submitAnswer').onclick = async function() {
+$('bannerSubmit').onclick = async function() {
   if (answering) return;
-  const answer = $('questionAnswer').value.trim();
-  if (!answer) { $('questionErr').textContent = 'Please type an answer.'; return; }
+  const answer = $('bannerAnswer').value.trim();
+  if (!answer) { $('bannerErr').textContent = 'Please type an answer.'; return; }
   answering = true;
-  $('submitAnswer').disabled = true;
+  $('bannerSubmit').disabled = true;
   try {
     const r = await api('POST', '/api/questions/' + pendingQuestionId + '/answer', { answer });
     if (r.ok) {
-      $('questionOverlay').classList.add('hidden');
+      // Success: hide banner, re-enable UI, reload feeds
+      $('questionBanner').classList.add('hidden');
       pendingQuestionId = null;
+      // Re-enable compose bar
+      $('composeRow').style.opacity = '1';
+      $('composeRow').style.pointerEvents = 'auto';
+      $('sendBtn').disabled = false;
       updateUI();
       loadFeed();
       loadRewards();
     } else {
       const j = await r.json();
-      $('questionErr').textContent = j.error || 'Failed to submit answer.';
-      $('submitAnswer').disabled = false;
+      $('bannerErr').textContent = j.error || 'Failed to submit answer.';
+      $('bannerSubmit').disabled = false;
     }
   } catch(e) {
-    $('questionErr').textContent = 'Failed to submit answer.';
-    $('submitAnswer').disabled = false;
+    $('bannerErr').textContent = 'Failed to submit answer.';
+    $('bannerSubmit').disabled = false;
   } finally {
     answering = false;
   }
 };
 
-/* ===== INIT ===== */
-document.addEventListener('keydown', function(e) { if (e.key === 'Enter') { var f = document.activeElement; if (f && f.id === 'composeInput') { e.preventDefault(); postWhisper(); } } });
-(async function() {
-  // If localStorage says we're logged in, verify the server session is still valid
-  if (isLogged()) {
+/* ===== UI STATE ===== */
     try {
       const r = await api('GET', '/api/me');
       if (!r.ok) {
