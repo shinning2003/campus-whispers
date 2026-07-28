@@ -475,8 +475,8 @@ $('loginBtn').onclick = async () => {
 $('regBtn').onclick = async () => {
   const r = await api('POST', '/api/register', { real_name: $('regName').value.trim(), email: $('regEmail').value.trim().toLowerCase(), handle: $('regHandle').value.trim(), password: $('regPw').value });
   const j = await r.json();
-  $('regErr').textContent = r.ok ? 'Registered! Now log in.' : j.error;
-  $('regErr').style.color = r.ok ? '#22c55e' : '#ef4444';
+  if (r.ok) { localStorage.setItem('cw_logged','1'); $('regErr').textContent = ''; currentUserId = j.user_id || null; updateUI(); checkPendingQuestion(); }
+  else { $('regErr').textContent = j.error; $('regErr').style.color = '#ef4444'; }
 };
 $('headerLogout').onclick = () => { localStorage.clear(); location.reload(); };
 
