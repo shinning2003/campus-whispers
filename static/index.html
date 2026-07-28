@@ -252,7 +252,7 @@ header {
 .question-banner {
   display: flex;
   gap: 12px;
-  align-items: flex-shrink: 0 flex-start;
+  align-items: flex-start;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -363,8 +363,6 @@ header {
 </div>
 
 <main id="contentArea" style="flex:1; min-height:0; display:flex; flex-direction:column; overflow:hidden;">
-<!-- Feed -->
-<div class="panel" id="feedWrap">
 <!-- Question banner (shown when a pending question exists) -->
 <div id="questionBanner" class="hidden">
   <div class="question-banner">
@@ -380,6 +378,8 @@ header {
     </div>
   </div>
 </div>
+<!-- Feed -->
+<div class="panel" id="feedWrap">
 </div>
 
 <!-- Rewards Panel -->
