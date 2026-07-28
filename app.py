@@ -29,9 +29,12 @@ def create_app(config=None):
     if config:
         app.config.update(config)
 
-    # SocketIO with optional Redis Pub/Sub (set REDIS_URL env var to enable)
+    # SocketIO with optional Redis Pub/Sub (set REDIS_URL env var to enable).
+    # Uses 'threading' async mode so it works with standard gunicorn workers
+    # (no eventlet/gevent dependency). Falls back to HTTP long-polling transport.
     redis_url = os.environ.get("REDIS_URL")
     socketio.init_app(app, cors_allowed_origins="*",
+                      async_mode='threading',
                       message_queue=redis_url if redis_url else None)
 
     @app.post("/api/register")
@@ -1718,4 +1721,4 @@ if __name__ == "__main__":
     with app.app_context():
         init_db()
     port = int(os.environ.get("PORT", 5000))
-    socketio.run(app, host="0.0.0.0", port=port, debug=True)
+    app.run(host="0.0.0.0", port=port, debug=True)

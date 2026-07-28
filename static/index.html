@@ -812,7 +812,7 @@ let socket = null;
 
 function connectSocket() {
   if (socket && socket.connected) return;
-  socket = io(window.location.origin, { transports: ['websocket', 'polling'] });
+  socket = io(window.location.origin, { transports: ['polling'] });
 
   socket.on('connect', () => {
     console.log('[ws] connected');
