@@ -1162,7 +1162,7 @@ def get_db(db_path=None):
             import psycopg
             from psycopg.rows import dict_row
             import socket
-            from urllib.parse import urlparse, urlunparse
+            from urllib.parse import urlparse, urlunparse, quote
 
             # Force IPv4: Render's free tier cannot route to Supabase's IPv6
             # address, so connecting to db.<ref>.supabase.co yields
@@ -1188,6 +1188,19 @@ def get_db(db_path=None):
                             netloc += ":" + str(parsed.port)
                         parsed = parsed._replace(netloc=netloc)
                         url = urlunparse(parsed)
+                        # Neon uses SNI (Server Name Indication) to route
+                        # connections to the right project. When we replace the
+                        # hostname with a bare IPv4 address, SNI is lost. Pass
+                        # the endpoint ID as an explicit connection option so
+                        # older libpq versions (Render's Python 3.14) can
+                        # connect without SNI support.
+                        if ".neon.tech" in host:
+                            ep_id = host.split(".")[0].replace("-pooler", "")
+                            opt = quote(f"endpoint={ep_id}")
+                            if "?" in url:
+                                url += "&options=" + opt
+                            else:
+                                url += "?options=" + opt
                 except Exception:
                     pass  # keep original URL if resolution fails
 
