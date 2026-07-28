@@ -21,9 +21,15 @@ def create_app(config=None):
         ADMIN_PASSWORD=os.environ.get("ADMIN_PASSWORD", "admin123"),
         ADMIN_EMAIL=os.environ.get("ADMIN_EMAIL", "11surendiran2003@gmail.com"),
         SECRET_KEY=os.environ.get("SECRET_KEY", "dev-secret-change-me"),
+        SESSION_PERMANENT=True,
+        PERMANENT_SESSION_LIFETIME=timedelta(days=30),
     )
     if config:
         app.config.update(config)
+
+    @app.before_request
+    def persist_session():
+        session.permanent = True
 
     @app.post("/api/register")
     def register():
