@@ -11,10 +11,6 @@ from datetime import datetime, timezone, timedelta
 
 from flask import Flask, jsonify, request, session, current_app
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask_socketio import SocketIO, emit, join_room, leave_room
-
-# SocketIO instance — initialised inside create_app() with optional Redis Pub/Sub
-socketio = SocketIO()
 
 
 def create_app(config=None):
@@ -28,14 +24,6 @@ def create_app(config=None):
     )
     if config:
         app.config.update(config)
-
-    # SocketIO with optional Redis Pub/Sub (set REDIS_URL env var to enable).
-    # Uses 'threading' async mode so it works with standard gunicorn workers
-    # (no eventlet/gevent dependency). Falls back to HTTP long-polling transport.
-    redis_url = os.environ.get("REDIS_URL")
-    socketio.init_app(app, cors_allowed_origins="*",
-                      async_mode='threading',
-                      message_queue=redis_url if redis_url else None)
 
     @app.post("/api/register")
     def register():
@@ -149,8 +137,6 @@ def create_app(config=None):
         ).fetchone()
         out = rumor_public(row, conn)
         conn.close()
-        # Broadcast new rumor to all connected clients
-        socketio.emit('new_rumor', {'id': rid})
         return jsonify(out), 201
 
     @app.get("/api/rumors")
@@ -742,11 +728,6 @@ def create_app(config=None):
         conn.commit()
         new_points = _compute_points(conn, uid)
         conn.close()
-        # Emit real-time points update to the specific user
-        socketio.emit('points_update', {
-            'uid': uid,
-            'points': new_points,
-        }, room=str(uid))
         return jsonify({"ok": True, "uid": uid, "points": new_points, "awarded": amount})
 
     @app.delete("/api/admin/users/<int:uid>")
@@ -802,12 +783,6 @@ def create_app(config=None):
             conn.commit()
             qid = cur.lastrowid
         conn.close()
-        # Broadcast to all connected users that a new question is active
-        socketio.emit('new_question', {
-            'id': qid,
-            'text': text,
-            'created_at': now,
-        })
         return jsonify({"ok": True, "id": qid}), 201
 
     @app.delete("/api/admin/questions/<int:qid>")
@@ -895,12 +870,6 @@ def create_app(config=None):
                 (uid, rumor_text, now))
             conn.commit()
         conn.close()
-        # Notify the user that their answer was accepted (removes banner)
-        socketio.emit('question_answered', {
-            'question_id': qid,
-        }, room=str(uid))
-        # Broadcast new rumor to all connected clients
-        socketio.emit('new_rumor', {'answered': qid})
         return jsonify({"ok": True, "answered": qid}), 201
 
     @app.get("/")
@@ -1693,32 +1662,3 @@ def _user_rank(conn, user_id):
         if uid == user_id:
             return i
     return None
-
-
-# === SocketIO event handlers ===
-
-@socketio.on('connect')
-def on_connect():
-    """When a client connects, join a room keyed by their user_id so we can
-    send targeted events (points updates, question-answered confirmation)."""
-    user_id = session.get("user_id")
-    if user_id is not None:
-        join_room(str(user_id))
-
-
-@socketio.on('disconnect')
-def on_disconnect():
-    user_id = session.get("user_id")
-    if user_id is not None:
-        leave_room(str(user_id))
-
-
-# Allow running directly (local dev)
-if __name__ == "__main__":
-    import os
-    db_path = os.environ.get("DB_PATH", "campus_whispers.db")
-    app = create_app({"DB_PATH": db_path})
-    with app.app_context():
-        init_db()
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=True)
