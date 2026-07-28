@@ -9,6 +9,7 @@
 <title>Whisper Room — B.Sc.</title>
   <link rel="manifest" href="/static/manifest.json" />
   <link rel="apple-touch-icon" href="/static/icons/icon-192.svg" />
+  <script src="/static/socket.io.min.js"></script>
 <style>
 :root {
   --bg:#0a0f1a; --surface:#111827; --card:#1a2332; --elevated:#1e293b;
@@ -810,6 +811,58 @@ $('bannerSubmit').onclick = async function() {
   }
 };
 
+/* ===== SOCKET.IO (live updates) ===== */
+let socket = null;
+
+function connectSocket() {
+  if (socket && socket.connected) return;
+  socket = io(window.location.origin, { transports: ['polling'] });
+
+  socket.on('connect', () => {
+    console.log('[ws] connected');
+  });
+
+  socket.on('new_question', (data) => {
+    pendingQuestionId = data.id;
+    $('bannerQuestionText').textContent = data.text;
+    $('bannerAnswer').value = '';
+    $('bannerErr').textContent = '';
+    $('bannerSubmit').disabled = false;
+    $('questionBanner').classList.remove('hidden');
+    $('composeRow').style.opacity = '0.5';
+    $('composeRow').style.pointerEvents = 'none';
+    $('sendBtn').disabled = true;
+  });
+
+  socket.on('question_answered', (data) => {
+    $('questionBanner').classList.add('hidden');
+    pendingQuestionId = null;
+    $('composeRow').style.opacity = '1';
+    $('composeRow').style.pointerEvents = 'auto';
+    $('sendBtn').disabled = false;
+    loadFeed();
+  });
+
+  socket.on('points_update', (data) => {
+    $('statPoints').textContent = data.points || 0;
+    api('GET', '/api/me').then(r => {
+      if (r.ok) r.json().then(me => {
+        $('statRank').textContent = me.rank || '—';
+        const rp = $('statRwdPoints'); if (rp) rp.textContent = me.points || 0;
+        const rr = $('statRwdRank'); if (rr) rr.textContent = me.rank || '—';
+      });
+    }).catch(() => {});
+  });
+
+  socket.on('new_rumor', () => {
+    loadFeed();
+  });
+
+  socket.on('disconnect', () => {
+    console.log('[ws] disconnected — will poll as fallback');
+  });
+}
+
 /* ===== POLLING (live updates) ===== */
 let pollTimer = null;
 function startPolling() {
@@ -866,6 +919,7 @@ function startPolling() {
   updateUI();
   checkPendingQuestion();
   startPolling();
+  connectSocket();
 })();
 </script>
   <script>

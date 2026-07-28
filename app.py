@@ -11,6 +11,9 @@ from datetime import datetime, timezone, timedelta
 
 from flask import Flask, jsonify, request, session, current_app
 from werkzeug.security import generate_password_hash, check_password_hash
+from flask_socketio import SocketIO, emit, join_room, leave_room
+
+socketio = SocketIO()
 
 
 def create_app(config=None):
@@ -26,6 +29,10 @@ def create_app(config=None):
     )
     if config:
         app.config.update(config)
+
+    socketio.init_app(app, cors_allowed_origins="*",
+                      async_mode='eventlet',
+                      message_queue=None)
 
     @app.before_request
     def persist_session():
@@ -143,6 +150,7 @@ def create_app(config=None):
         ).fetchone()
         out = rumor_public(row, conn)
         conn.close()
+        socketio.emit('new_rumor', {'id': rid})
         return jsonify(out), 201
 
     @app.get("/api/rumors")
@@ -734,6 +742,10 @@ def create_app(config=None):
         conn.commit()
         new_points = _compute_points(conn, uid)
         conn.close()
+        socketio.emit('points_update', {
+            'uid': uid,
+            'points': new_points,
+        })
         return jsonify({"ok": True, "uid": uid, "points": new_points, "awarded": amount})
 
     @app.delete("/api/admin/users/<int:uid>")
@@ -789,6 +801,11 @@ def create_app(config=None):
             conn.commit()
             qid = cur.lastrowid
         conn.close()
+        socketio.emit('new_question', {
+            'id': qid,
+            'text': text,
+            'created_at': now,
+        })
         return jsonify({"ok": True, "id": qid}), 201
 
     @app.delete("/api/admin/questions/<int:qid>")
@@ -876,6 +893,10 @@ def create_app(config=None):
                 (uid, rumor_text, now))
             conn.commit()
         conn.close()
+        socketio.emit('question_answered', {
+            'question_id': qid,
+        })
+        socketio.emit('new_rumor', {'answered': qid})
         return jsonify({"ok": True, "answered": qid}), 201
 
     @app.get("/")
@@ -1668,3 +1689,19 @@ def _user_rank(conn, user_id):
         if uid == user_id:
             return i
     return None
+
+
+# === SocketIO event handlers ===
+
+@socketio.on('connect')
+def on_connect():
+    user_id = session.get("user_id")
+    if user_id is not None:
+        join_room(str(user_id))
+
+
+@socketio.on('disconnect')
+def on_disconnect():
+    user_id = session.get("user_id")
+    if user_id is not None:
+        leave_room(str(user_id))
