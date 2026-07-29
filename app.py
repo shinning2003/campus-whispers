@@ -1063,13 +1063,12 @@ def get_db(db_path=None):
                     # Build the final URL once for this worker
                     if _resolved_pg_url is None:
                         from urllib.parse import parse_qs
-                        parsed = urlparse(url)
-                        # Merge existing options with statement_timeout
-                        qs = parse_qs(parsed.query)
-                        existing_opts = (qs.get("options", [None])[0] or "")
-                        new_opts = existing_opts + " -c statement_timeout=5000"
-                        qs["options"] = [new_opts]
                         import urllib.parse as up
+                        parsed = urlparse(url)
+                        qs = parse_qs(parsed.query)
+                        # PgBouncer only accepts -c key=val format; endpoint=
+                        # is not needed with pooled URL (PgBouncer handles routing)
+                        qs["options"] = ["-c statement_timeout=5000"]
                         parsed = parsed._replace(query=up.urlencode(qs, doseq=True))
                         _resolved_pg_url = urlunparse(parsed)
                     _db_global = psycopg.connect(
