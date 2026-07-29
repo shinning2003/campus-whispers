@@ -660,13 +660,15 @@ function updateUI() {
   if (logged) { switchPanel('feed'); loadFeed(); loadRewards(); }
 }
 
-/* ===== POLLING (live updates, 3s) ===== */
+/* ===== POLLING (live updates, 1s) ===== */
 let pollTimer = null;
 function startPolling() {
   if (pollTimer) return;
+  let pollCount = 0;
   pollTimer = setInterval(async () => {
     if (!isLogged()) return;
-    // Refresh points/rank in header
+    pollCount++;
+    // Refresh points/rank every poll (1s)
     try {
       const r = await api('GET', '/api/me');
       if (r.ok) {
@@ -676,7 +678,9 @@ function startPolling() {
         currentUserId = me.user_id || null;
       }
     } catch(e) {}
-  }, 3000); // fast poll every 3s
+    // Refresh feed every 4th poll (~4s)
+    if (pollCount % 4 === 0) loadFeed();
+  }, 1000);
 }
 
 (async function() {
