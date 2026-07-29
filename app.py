@@ -31,6 +31,16 @@ def create_app(config=None):
     def persist_session():
         session.permanent = True
 
+    @app.teardown_appcontext
+    def close_db(exc=None):
+        pool = g.pop("_db_pool", None)
+        db = g.pop("db", None)
+        if db is not None:
+            if pool is not None:
+                pool.putconn(db)
+            else:
+                db.close()
+
     @app.post("/api/register")
     def register():
         p = request.get_json(silent=True) or {}
@@ -802,12 +812,6 @@ def create_app(config=None):
     except Exception as exc:  # pragma: no cover - defensive startup guard
         app.logger.error("Campus Whispers: DB init failed at startup: %s", exc)
 
-    @app.teardown_appcontext
-    def close_db(exc=None):
-        db = g.pop("db", None)
-        if db is not None:
-            db.close()
-
     return app
 
 
@@ -1036,14 +1040,17 @@ def serve_page(name):
         return f.read()
 
 
+_db_pool = None
+_resolved_pg_url = None
+
+
 def get_db(db_path=None):
     """Return a connection to whichever DB is configured.
 
-    If DATABASE_URL (Supabase Postgres) is set, use psycopg; otherwise
-    fall back to the local SQLite file. Both expose a sqlite3.Row-like
-    dict interface via the adapters below.
+    If DATABASE_URL is set, use psycopg with a persistent connection pool;
+    otherwise fall back to the local SQLite file.
     """
-    # Cache connection per request — avoids 1-3s TCP connection setup
+    # Cache connection per request
     if db_path is None and 'db' in g:
         return g.db
     url = db_path or current_app.config.get("DATABASE_URL")
@@ -1054,52 +1061,62 @@ def get_db(db_path=None):
             import socket
             from urllib.parse import urlparse, urlunparse, quote
 
-            # Force IPv4: Render's free tier cannot route to Supabase's IPv6
-            # address, so connecting to db.<ref>.supabase.co yields
-            # "Network is unreachable". We pre-resolve to an A record with
-            # socket.gethostbyname() (IPv4-only by definition — more reliable
-            # here than getaddrinfo(..., AF_INET), which Render's resolver
-            # returns empty for) and pin the literal IPv4 address directly
-            # into the connection URL so libpq never does an AAAA lookup.
-            parsed = urlparse(url)
-            host = parsed.hostname
-            if host and not _looks_like_ip(host):
-                try:
-                    ipv4 = socket.gethostbyname(host)
-                    if ipv4 and not ipv4.startswith(":"):
-                        auth = ""
-                        if parsed.username is not None:
-                            auth = parsed.username
-                            if parsed.password is not None:
-                                auth += ":" + parsed.password
-                        netloc = (auth + "@") if auth else ""
-                        netloc += ipv4
-                        if parsed.port:
-                            netloc += ":" + str(parsed.port)
-                        parsed = parsed._replace(netloc=netloc)
-                        url = urlunparse(parsed)
-                        # Neon uses SNI (Server Name Indication) to route
-                        # connections to the right project. When we replace the
-                        # hostname with a bare IPv4 address, SNI is lost. Pass
-                        # the endpoint ID as an explicit connection option so
-                        # older libpq versions (Render's Python 3.14) can
-                        # connect without SNI support.
-                        if ".neon.tech" in host:
-                            ep_id = host.split(".")[0].replace("-pooler", "")
-                            opt = quote(f"endpoint={ep_id}")
-                            if "?" in url:
-                                url += "&options=" + opt
-                            else:
-                                url += "?options=" + opt
-                except Exception:
-                    pass  # keep original URL if resolution fails
+            # Resolve URL to IPv4-pinned string (idempotent)
+            def resolve(url):
+                parsed = urlparse(url)
+                host = parsed.hostname
+                if host and not _looks_like_ip(host):
+                    try:
+                        ipv4 = socket.gethostbyname(host)
+                        if ipv4 and not ipv4.startswith(":"):
+                            auth = ""
+                            if parsed.username is not None:
+                                auth = parsed.username
+                                if parsed.password is not None:
+                                    auth += ":" + parsed.password
+                            netloc = (auth + "@") if auth else ""
+                            netloc += ipv4
+                            if parsed.port:
+                                netloc += ":" + str(parsed.port)
+                            parsed = parsed._replace(netloc=netloc)
+                            url = urlunparse(parsed)
+                            if ".neon.tech" in host:
+                                ep_id = host.split(".")[0].replace("-pooler", "")
+                                opt = quote(f"endpoint={ep_id}")
+                                if "?" in url:
+                                    url += "&options=" + opt
+                                else:
+                                    url += "?options=" + opt
+                    except Exception:
+                        pass
+                return url
 
-            conn = psycopg.connect(url, row_factory=dict_row, connect_timeout=10)
             if db_path is None:
+                # Use a warm connection pool (much faster than per-request connect)
+                global _db_pool, _resolved_pg_url
+                if _db_pool is None:
+                    from psycopg_pool import ConnectionPool
+                    _resolved_pg_url = resolve(url)
+                    _db_pool = ConnectionPool(
+                        conninfo=_resolved_pg_url,
+                        min_size=1,
+                        max_size=5,
+                        max_idle=300,
+                        timeout=10,
+                        open=True,
+                        kwargs={"row_factory": dict_row, "connect_timeout": 10},
+                    )
+                conn = _db_pool.getconn()
                 g.db = conn
-            return conn
+                g._db_pool = _db_pool
+                return conn
+            else:
+                # One-off connection (init_db with custom path)
+                final = resolve(url)
+                return psycopg.connect(final, row_factory=dict_row, connect_timeout=10)
+
         except ImportError:
-            pass  # psycopg not installed -> fall through to sqlite
+            pass  # no psycopg → SQLite fallback
     # SQLite (local dev)
     conn = sqlite3.connect(
         current_app.config["DB_PATH"], timeout=30
@@ -1377,7 +1394,8 @@ def init_db(db_path=None):
             )"""
         )
     conn.commit()
-    conn.close()
+    # Don't close pool connections — the teardown handler returns them
+    # (init_db is called inside app_context so close_db fires on exit)
 
 
 def hash_password(pw):
