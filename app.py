@@ -36,8 +36,8 @@ def create_app(config=None):
         pool = g.pop("_db_pool", None)
         db = g.pop("db", None)
         if db is not None:
-            if pool is not None:
-                pool.putconn(db)
+            if pool is not None and hasattr(db, '_pool_orig_close'):
+                db._pool_orig_close()  # returns conn to pool
             else:
                 db.close()
 
@@ -1107,6 +1107,11 @@ def get_db(db_path=None):
                         kwargs={"row_factory": dict_row, "connect_timeout": 10},
                     )
                 conn = _db_pool.getconn()
+                # Routes call conn.close() on early returns — for pool connections
+                # that returns the conn to the pool AND marks it returned. Make
+                # close a no-op so the teardown handler is the sole return path.
+                conn._pool_orig_close = conn.close
+                conn.close = lambda: None
                 g.db = conn
                 g._db_pool = _db_pool
                 return conn
