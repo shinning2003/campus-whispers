@@ -1062,16 +1062,15 @@ def get_db(db_path=None):
                 if _db_global is None:
                     # Build the final URL once for this worker
                     if _resolved_pg_url is None:
+                        from urllib.parse import parse_qs
                         parsed = urlparse(url)
-                        # Add statement_timeout and Neon endpoint to options
-                        host = parsed.hostname
-                        q = parsed.query
-                        if q:
-                            q += "&"
-                        else:
-                            q = ""
-                        q += "options=" + quote("endpoint=" + host.split(".")[0].replace("-pooler", "") + " -c statement_timeout=5000")
-                        parsed = parsed._replace(query=q)
+                        # Merge existing options with statement_timeout
+                        qs = parse_qs(parsed.query)
+                        existing_opts = (qs.get("options", [None])[0] or "")
+                        new_opts = existing_opts + " -c statement_timeout=5000"
+                        qs["options"] = [new_opts]
+                        import urllib.parse as up
+                        parsed = parsed._replace(query=up.urlencode(qs, doseq=True))
                         _resolved_pg_url = urlunparse(parsed)
                     _db_global = psycopg.connect(
                         _resolved_pg_url,
@@ -1117,17 +1116,11 @@ def get_db(db_path=None):
     return conn
 
 
-def _looks_like_ip(host):
-    import socket
-    try:
-        socket.inet_aton(host)
-        return True
-    except OSError:
-        return False
+def hash_password(pw):
+    return generate_password_hash(pw)
 
 
 def exec(conn, sql, params=()):
-    """Run a query, transparently adapting `?` placeholders to `%s` for Postgres."""
     import psycopg
     if isinstance(conn, psycopg.Connection):
         sql = sql.replace("?", "%s")
