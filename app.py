@@ -53,12 +53,22 @@ def create_app(config=None):
         if exec(conn, "SELECT 1 FROM users WHERE email=?", (email,)).fetchone():
             conn.close()
             return jsonify({"error": "Email already registered."}), 400
-        cur = exec(conn,
-            "INSERT INTO users (real_name, email, handle, password_hash) VALUES (?,?,?,?)",
-            (real_name, email, handle, generate_password_hash(password)),
-        )
-        conn.commit()
-        uid = cur.lastrowid
+        import psycopg
+        is_pg = isinstance(conn, psycopg.Connection)
+        if is_pg:
+            cur = exec(conn,
+                "INSERT INTO users (real_name, email, handle, password_hash) VALUES (?,?,?,?) RETURNING id",
+                (real_name, email, handle, generate_password_hash(password)),
+            )
+            conn.commit()
+            uid = cur.fetchone()["id"]
+        else:
+            cur = exec(conn,
+                "INSERT INTO users (real_name, email, handle, password_hash) VALUES (?,?,?,?)",
+                (real_name, email, handle, generate_password_hash(password)),
+            )
+            conn.commit()
+            uid = cur.lastrowid
         conn.close()
         session["user_id"] = uid
         return jsonify({"ok": True, "handle": handle, "user_id": uid}), 201
