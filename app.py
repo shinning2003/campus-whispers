@@ -1108,7 +1108,7 @@ def get_db(db_path=None):
                     # Verify connection is alive; reconnect if broken
                     conn = _db_global
                     try:
-                        conn.cursor().execute("SELECT 1")
+                        conn.cursor().execute("SELECT 1").fetchone()
                     except Exception:
                         try:
                             conn.close()
