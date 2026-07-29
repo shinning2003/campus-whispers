@@ -1055,22 +1055,15 @@ def get_db(db_path=None):
         try:
             import psycopg
             from psycopg.rows import dict_row
-            from urllib.parse import urlparse, urlunparse, quote
 
             if db_path is None:
                 global _db_global, _resolved_pg_url
                 if _db_global is None:
                     # Build the final URL once for this worker
                     if _resolved_pg_url is None:
-                        from urllib.parse import parse_qs
-                        import urllib.parse as up
-                        parsed = urlparse(url)
-                        qs = parse_qs(parsed.query)
-                        # PgBouncer only accepts -c key=val format; endpoint=
-                        # is not needed with pooled URL (PgBouncer handles routing)
-                        qs["options"] = ["-c statement_timeout=5000"]
-                        parsed = parsed._replace(query=up.urlencode(qs, doseq=True))
-                        _resolved_pg_url = urlunparse(parsed)
+                        # Use DATABASE_URL as-is — psycopg3 on Python 3.14+ handles SNI natively,
+                        # no IPv4 pinning needed. The pooled URL already has sslmode & options.
+                        _resolved_pg_url = url
                     _db_global = psycopg.connect(
                         _resolved_pg_url,
                         row_factory=dict_row,
@@ -1099,8 +1092,7 @@ def get_db(db_path=None):
                 return _db_global
             else:
                 # One-off connection (init_db with custom path)
-                cfg = urlparse(url)
-                return psycopg.connect(cfg, row_factory=dict_row, connect_timeout=5)
+                return psycopg.connect(url, row_factory=dict_row, connect_timeout=5)
 
         except ImportError:
             pass  # no psycopg → SQLite fallback
