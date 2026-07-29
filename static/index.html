@@ -660,46 +660,21 @@ function updateUI() {
   if (logged) { switchPanel('feed'); loadFeed(); loadRewards(); }
 }
 
-/* ===== POLLING (live updates, 1s) ===== */
-let pollTimer = null;
-function startPolling() {
-  if (pollTimer) return;
-  let pollCount = 0;
-  pollTimer = setInterval(async () => {
-    if (!isLogged()) return;
-    pollCount++;
-    // Refresh points/rank every poll (1s)
-    try {
-      const r = await api('GET', '/api/me');
-      if (r.ok) {
-        const me = await r.json();
-        $('statPoints').textContent = me.points || 0;
-        $('statRank').textContent = me.rank || '—';
-        currentUserId = me.user_id || null;
-      }
-    } catch(e) {}
-    // Refresh feed every 4th poll (~4s)
-    if (pollCount % 4 === 0) loadFeed();
-  }, 1000);
+(async function init() {
+  try {
+  const r = await api('GET', '/api/me');
+  if (!r.ok) {
+    localStorage.removeItem('cw_logged');
+    currentUserId = null;
+  } else {
+    const me = await r.json();
+    currentUserId = me.user_id || null;
+  }
+} catch(e) {
+  localStorage.removeItem('cw_logged');
+  currentUserId = null;
 }
-
-(async function() {
-/* ===== UI STATE ===== */
-    try {
-      const r = await api('GET', '/api/me');
-      if (!r.ok) {
-        localStorage.removeItem('cw_logged');
-        currentUserId = null;
-      } else {
-        const me = await r.json();
-        currentUserId = me.user_id || null;
-      }
-    } catch(e) {
-      localStorage.removeItem('cw_logged');
-      currentUserId = null;
-    }
-  updateUI();
-  startPolling();
+updateUI();
 })();
 </script>
   <script>
