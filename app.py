@@ -1128,7 +1128,8 @@ def init_db(db_path=None):
                 email TEXT NOT NULL UNIQUE,
                 handle TEXT NOT NULL UNIQUE,
                 password_hash TEXT NOT NULL,
-                banned INTEGER NOT NULL DEFAULT 0
+                banned INTEGER NOT NULL DEFAULT 0,
+                points INTEGER NOT NULL DEFAULT 0
             )"""
         )
         conn.execute(
@@ -1224,7 +1225,8 @@ def init_db(db_path=None):
                 conn.execute(f"ALTER TABLE rumors ADD COLUMN {col} {typ}")
             except Exception:
                 pass
-        for col, typ in [("points_spent", "INTEGER NOT NULL DEFAULT 0"),
+        for col, typ in [("points", "INTEGER NOT NULL DEFAULT 0"),
+                         ("points_spent", "INTEGER NOT NULL DEFAULT 0"),
                          ("points_awarded", "INTEGER NOT NULL DEFAULT 0"),
                          ("custom_alias", "TEXT")]:
             try:
@@ -1255,7 +1257,8 @@ def init_db(db_path=None):
                 email TEXT NOT NULL UNIQUE,
                 handle TEXT NOT NULL UNIQUE,
                 password_hash TEXT NOT NULL,
-                banned INTEGER NOT NULL DEFAULT 0
+                banned INTEGER NOT NULL DEFAULT 0,
+                points INTEGER NOT NULL DEFAULT 0
             )"""
         )
         # Self-heal: add email column if it's missing.
@@ -1337,7 +1340,7 @@ def init_db(db_path=None):
                 conn.execute(f"ALTER TABLE rumors ADD COLUMN IF NOT EXISTS {col} INTEGER NOT NULL DEFAULT 0")
             except Exception:
                 pass
-        for col in ["points_spent", "points_awarded"]:
+        for col in ["points", "points_spent", "points_awarded"]:
             try:
                 conn.execute(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {col} INTEGER NOT NULL DEFAULT 0")
             except Exception:
@@ -1483,7 +1486,9 @@ def _compute_points(conn, user_id):
     # subtract points spent in the shop
     row = exec(conn, "SELECT points_spent FROM users WHERE id=?", (user_id,)).fetchone()
     spent = row[0] if not hasattr(row, "keys") else row["points_spent"]
-    return max(earned + awarded - spent, 0)
+    total = max(earned + awarded - spent, 0)
+    exec(conn, "UPDATE users SET points=? WHERE id=?", (total, user_id))
+    return total
 
 
 def _compute_badges(conn, user_id):
@@ -1521,11 +1526,8 @@ def _challenge_progress(conn, user_id, kind):
 
 def _user_rank(conn, user_id):
     """1-based rank of a user by points (higher points = better rank)."""
-    ids = [r[0] if not hasattr(r, "keys") else r["id"]
-           for r in exec(conn, "SELECT id FROM users WHERE banned=0", ()).fetchall()]
-    scored = sorted(((uid, _compute_points(conn, uid)) for uid in ids),
-                    key=lambda t: t[1], reverse=True)
-    for i, (uid, _pts) in enumerate(scored, start=1):
-        if uid == user_id:
-            return i
-    return None
+    row = exec(conn,
+        "SELECT COUNT(*) + 1 FROM users WHERE banned=0 AND points > "
+        "(SELECT points FROM users WHERE id=?)",
+        (user_id,)).fetchone()
+    return row[0] if row else None
