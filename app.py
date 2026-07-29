@@ -9,7 +9,7 @@ import re
 import sqlite3
 from datetime import datetime, timezone, timedelta
 
-from flask import Flask, jsonify, request, session, current_app
+from flask import Flask, jsonify, request, session, current_app, g
 from werkzeug.security import generate_password_hash, check_password_hash
 
 
@@ -757,136 +757,7 @@ def create_app(config=None):
         conn.close()
         return jsonify({"ok": True, "banned": uid})
 
-    # === Admin: Questions ===
-    @app.get("/api/admin/questions")
-    def admin_list_questions():
-        if not session.get("admin"):
-            return jsonify({"error": "Unauthorized."}), 401
-        conn = get_db()
-        rows = exec(conn,
-            "SELECT q.id, q.question_text, q.created_at, q.active, "
-            "(SELECT COUNT(*) FROM question_answers WHERE question_id=q.id) AS answer_count "
-            "FROM questions q ORDER BY q.id DESC"
-        ).fetchall()
-        conn.close()
-        return jsonify({"questions": [dict(r) for r in rows]})
-
-    @app.post("/api/admin/questions")
-    def admin_create_question():
-        if not session.get("admin"):
-            return jsonify({"error": "Unauthorized."}), 401
-        p = request.get_json(silent=True) or {}
-        text = (p.get("text") or "").strip()
-        if not text:
-            return jsonify({"error": "Question text required."}), 400
-        now = datetime.now(timezone.utc).isoformat()
-        conn = get_db()
-        # Deactivate any previously active questions
-        exec(conn, "UPDATE questions SET active=0 WHERE active=1")
-        # Insert the new question
-        import psycopg
-        is_pg = isinstance(conn, psycopg.Connection)
-        if is_pg:
-            cur = exec(conn,
-                "INSERT INTO questions (question_text, created_at, active) VALUES (?,?,1) RETURNING id",
-                (text, now))
-            conn.commit()
-            qid = cur.fetchone()["id"]
-        else:
-            cur = exec(conn,
-                "INSERT INTO questions (question_text, created_at, active) VALUES (?,?,1)",
-                (text, now))
-            conn.commit()
-            qid = cur.lastrowid
-        conn.close()
-        return jsonify({"ok": True, "id": qid}), 201
-
-    @app.delete("/api/admin/questions/<int:qid>")
-    def admin_delete_question(qid):
-        if not session.get("admin"):
-            return jsonify({"error": "Unauthorized."}), 401
-        conn = get_db()
-        exec(conn, "DELETE FROM question_answers WHERE question_id=?", (qid,))
-        exec(conn, "DELETE FROM questions WHERE id=?", (qid,))
-        conn.commit()
-        conn.close()
-        return jsonify({"ok": True, "deleted": qid})
-
-    # === User-facing: Questions ===
-    @app.get("/api/questions/pending")
-    def get_pending_question():
-        """Return the active unanswered question for the current user, or null."""
-        if not session.get("user_id"):
-            return jsonify({"error": "Login required."}), 401
-        conn = get_db()
-        uid = session["user_id"]
-        # Find the most recent active question
-        q = exec(conn,
-            "SELECT id, question_text, created_at FROM questions WHERE active=1 "
-            "ORDER BY id DESC LIMIT 1"
-        ).fetchone()
-        if not q:
-            conn.close()
-            return jsonify({"question": None})
-        # Check if user already answered it
-        answered = exec(conn,
-            "SELECT 1 FROM question_answers WHERE question_id=? AND user_id=?",
-            (q["id"], uid)).fetchone()
-        conn.close()
-        if answered:
-            return jsonify({"question": None})
-        return jsonify({
-            "question": {
-                "id": q["id"],
-                "text": q["question_text"],
-                "created_at": q["created_at"],
-            }
-        })
-
-    @app.post("/api/questions/<int:qid>/answer")
-    def answer_question(qid):
-        if not session.get("user_id"):
-            return jsonify({"error": "Login required."}), 401
-        p = request.get_json(silent=True) or {}
-        answer = (p.get("answer") or "").strip()
-        if not answer:
-            return jsonify({"error": "Answer text required."}), 400
-        conn = get_db()
-        uid = session["user_id"]
-        # Verify question exists and is active
-        q = exec(conn, "SELECT id FROM questions WHERE id=? AND active=1", (qid,)).fetchone()
-        if not q:
-            conn.close()
-            return jsonify({"error": "Question not found or inactive."}), 404
-        # Check not already answered
-        already = exec(conn,
-            "SELECT 1 FROM question_answers WHERE question_id=? AND user_id=?",
-            (qid, uid)).fetchone()
-        if already:
-            conn.close()
-            return jsonify({"error": "Already answered."}), 400
-        now = datetime.now(timezone.utc).isoformat()
-        exec(conn,
-            "INSERT INTO question_answers (question_id, user_id, answer_text, answered_at) VALUES (?,?,?,?)",
-            (qid, uid, answer, now))
-        # Also post the answer as a rumor in the feed so everyone can see it
-        q_text = exec(conn, "SELECT question_text FROM questions WHERE id=?", (qid,)).fetchone()
-        question_text = q_text["question_text"] if q_text else "Question"
-        rumor_text = f"📋 Q: {question_text}\n\n💬 A: {answer}"
-        import psycopg
-        is_pg = isinstance(conn, psycopg.Connection)
-        if is_pg:
-            cur = exec(conn,
-                "INSERT INTO rumors (user_id, text, created_at) VALUES (?,?,?) RETURNING id",
-                (uid, rumor_text, now))
-            conn.commit()
-        else:
-            exec(conn,
-                "INSERT INTO rumors (user_id, text, created_at) VALUES (?,?,?)",
-                (uid, rumor_text, now))
-            conn.commit()
-        conn.close()
-        return jsonify({"ok": True, "answered": qid}), 201
+    # === Admin: (questions feature removed) ===
 
     @app.get("/")
     def index():
@@ -930,6 +801,12 @@ def create_app(config=None):
                 )
     except Exception as exc:  # pragma: no cover - defensive startup guard
         app.logger.error("Campus Whispers: DB init failed at startup: %s", exc)
+
+    @app.teardown_appcontext
+    def close_db(exc=None):
+        db = g.pop("db", None)
+        if db is not None:
+            db.close()
 
     return app
 
@@ -1166,6 +1043,9 @@ def get_db(db_path=None):
     fall back to the local SQLite file. Both expose a sqlite3.Row-like
     dict interface via the adapters below.
     """
+    # Cache connection per request — avoids 1-3s TCP connection setup
+    if db_path is None and 'db' in g:
+        return g.db
     url = db_path or current_app.config.get("DATABASE_URL")
     if url:
         try:
@@ -1215,6 +1095,8 @@ def get_db(db_path=None):
                     pass  # keep original URL if resolution fails
 
             conn = psycopg.connect(url, row_factory=dict_row, connect_timeout=10)
+            if db_path is None:
+                g.db = conn
             return conn
         except ImportError:
             pass  # psycopg not installed -> fall through to sqlite
@@ -1224,6 +1106,8 @@ def get_db(db_path=None):
     )
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
+    if db_path is None:
+        g.db = conn
     return conn
 
 
@@ -1373,26 +1257,7 @@ def init_db(db_path=None):
             conn.execute("ALTER TABLE users ADD COLUMN selected_badge TEXT DEFAULT NULL")
         except Exception:
             pass
-        # Admin questions feature
-        conn.execute(
-            """CREATE TABLE IF NOT EXISTS questions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                question_text TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                active INTEGER NOT NULL DEFAULT 1
-            )"""
-        )
-        conn.execute(
-            """CREATE TABLE IF NOT EXISTS question_answers (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                question_id INTEGER NOT NULL REFERENCES questions(id),
-                user_id INTEGER NOT NULL REFERENCES users(id),
-                answer_text TEXT NOT NULL,
-                answered_at TEXT NOT NULL,
-                UNIQUE(question_id, user_id)
-            )"""
-        )
-    else:  # Postgres (Supabase)
+    else:  # Postgres
         conn.execute(
             """CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
@@ -1468,6 +1333,29 @@ def init_db(db_path=None):
                 PRIMARY KEY (user_id, tag_id)
             )"""
         )
+        # Bump metadata
+        try:
+            conn.execute("ALTER TABLE rumors ADD COLUMN IF NOT EXISTS bumped_at TEXT")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE rumors ADD COLUMN IF NOT EXISTS featured INTEGER NOT NULL DEFAULT 0")
+        except Exception:
+            pass
+        for col in ["highlighted", "is_incognito"]:
+            try:
+                conn.execute(f"ALTER TABLE rumors ADD COLUMN IF NOT EXISTS {col} INTEGER NOT NULL DEFAULT 0")
+            except Exception:
+                pass
+        for col in ["points_spent", "points_awarded"]:
+            try:
+                conn.execute(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {col} INTEGER NOT NULL DEFAULT 0")
+            except Exception:
+                pass
+        try:
+            conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS custom_alias TEXT")
+        except Exception:
+            pass
         conn.execute(
             """CREATE TABLE IF NOT EXISTS challenge_claims (
                 user_id INTEGER NOT NULL REFERENCES users(id),
@@ -1478,28 +1366,6 @@ def init_db(db_path=None):
             )"""
         )
         conn.execute(
-            "ALTER TABLE rumors ADD COLUMN IF NOT EXISTS featured INTEGER NOT NULL DEFAULT 0")
-        try:
-            conn.execute("ALTER TABLE rumors ADD COLUMN highlighted INTEGER NOT NULL DEFAULT 0")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE users ADD COLUMN points_spent INTEGER NOT NULL DEFAULT 0")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE users ADD COLUMN points_awarded INTEGER NOT NULL DEFAULT 0")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE users ADD COLUMN custom_alias TEXT")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE rumors ADD COLUMN is_incognito INTEGER NOT NULL DEFAULT 0")
-        except Exception:
-            pass
-        conn.execute(
             """CREATE TABLE IF NOT EXISTS purchases (
                 id SERIAL PRIMARY KEY,
                 user_id INTEGER NOT NULL REFERENCES users(id),
@@ -1508,25 +1374,6 @@ def init_db(db_path=None):
                 meta TEXT,
                 created_at TEXT NOT NULL,
                 expires_at TEXT
-            )"""
-        )
-        # Admin questions feature (Postgres)
-        conn.execute(
-            """CREATE TABLE IF NOT EXISTS questions (
-                id SERIAL PRIMARY KEY,
-                question_text TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                active INTEGER NOT NULL DEFAULT 1
-            )"""
-        )
-        conn.execute(
-            """CREATE TABLE IF NOT EXISTS question_answers (
-                id SERIAL PRIMARY KEY,
-                question_id INTEGER NOT NULL REFERENCES questions(id),
-                user_id INTEGER NOT NULL REFERENCES users(id),
-                answer_text TEXT NOT NULL,
-                answered_at TEXT NOT NULL,
-                UNIQUE(question_id, user_id)
             )"""
         )
     conn.commit()

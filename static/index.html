@@ -247,83 +247,17 @@ header {
   .nav-btn { padding:6px 20px; }
 }
 
-/* ===== QUESTION BANNER (inline in feed) ===== */
-#questionBanner {
-  position: relative;
-  z-index: 5;
-  margin: 8px 0 16px 0;
-}
-.question-banner {
+/* ===== FILTER ROW ===== */
+.filter-row {
   display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 16px;
-}
-.q-icon {
-  font-size: 24px;
-  min-width: 28px;
-  text-align: center;
-  color: var(--accent);
-}
-.q-content {
-  flex: 1;
-  min-width: 0;
-}
-.q-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--accent);
-  margin-bottom: 4px;
-}
-.q-text {
-  font-size: 14px;
-  color: var(--text);
-  line-height: 1.5;
-  margin-bottom: 12px;
-  word-break: break-word;
-}
-.q-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-#bannerAnswer {
-  width: 100%;
-  min-height: 60px;
-  padding: 10px 12px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border);
-  background: var(--bg-input);
-  color: var(--text);
-  font-size: 14px;
-  font-family: inherit;
-  outline: none;
-  resize: vertical;
-  box-sizing: border-box;
-}
-#bannerAnswer:focus { border-color: var(--accent); }
-#bannerSubmit {
-  align-self: flex-start;
-  width: auto;
-  padding: 8px 16px;
-  font-size: 13px;
-  font-weight: 600;
-}
-.q-err {
-  font-size: 11px;
-  color: #ef4444;
-  min-height: 1.2em;
-  margin-top: 4px;
+  gap: 6px;
+  padding: 8px 12px 4px;
+  flex-wrap: wrap;
 }
 </style>
 </head>
 <body>
-
 <!-- Auth overlay -->
-<div id="authOverlay">
   <div class="auth-box" id="loginBox">
     <h2>Whisper Room</h2>
     <p>Anonymous confessions for B.Sc. CS</p>
@@ -367,21 +301,6 @@ header {
 </div>
 
 <main id="contentArea" style="flex:1; min-height:0; display:flex; flex-direction:column; overflow:hidden;">
-<!-- Question banner (shown when a pending question exists) -->
-<div id="questionBanner" class="hidden">
-  <div class="question-banner">
-    <div class="q-icon">📋</div>
-    <div class="q-content">
-      <div class="q-title">Admin Question</div>
-      <div class="q-text" id="bannerQuestionText"></div>
-    </div>
-    <div class="q-actions">
-      <textarea id="bannerAnswer" placeholder="Type your answer..." maxlength="1000"></textarea>
-      <button class="q-btn" id="bannerSubmit">Submit Answer</button>
-      <div class="q-err" id="bannerErr"></div>
-    </div>
-  </div>
-</div>
 <!-- Feed -->
 <div class="panel" id="feedWrap">
 </div>
@@ -473,13 +392,13 @@ $('showLogin').onclick = () => { $('regBox').classList.add('hidden'); $('loginBo
 $('loginBtn').onclick = async () => {
   const r = await api('POST', '/api/login', { identifier: $('loginId').value.trim(), password: $('loginPw').value });
   const j = await r.json();
-  if (r.ok) { localStorage.setItem('cw_logged','1'); $('loginErr').textContent = ''; currentUserId = j.user_id || null; updateUI(); checkPendingQuestion(); }
+  if (r.ok) { localStorage.setItem('cw_logged','1'); $('loginErr').textContent = ''; currentUserId = j.user_id || null; updateUI(); }
   else $('loginErr').textContent = j.error;
 };
 $('regBtn').onclick = async () => {
   const r = await api('POST', '/api/register', { real_name: $('regName').value.trim(), email: $('regEmail').value.trim().toLowerCase(), handle: $('regHandle').value.trim(), password: $('regPw').value });
   const j = await r.json();
-  if (r.ok) { localStorage.setItem('cw_logged','1'); $('regErr').textContent = ''; currentUserId = j.user_id || null; updateUI(); checkPendingQuestion(); }
+  if (r.ok) { localStorage.setItem('cw_logged','1'); $('regErr').textContent = ''; currentUserId = j.user_id || null; updateUI(); }
   else { $('regErr').textContent = j.error; $('regErr').style.color = '#ef4444'; }
 };
 $('headerLogout').onclick = () => { localStorage.clear(); location.reload(); };
@@ -740,76 +659,6 @@ function updateUI() {
   if (logged) { switchPanel('feed'); loadFeed(); loadRewards(); }
 }
 
-/* ===== QUESTION BANNER ===== */
-let answering = false;
-let pendingQuestionId = null;
-
-async function checkPendingQuestion() {
-  if (!isLogged()) return;
-  try {
-    const r = await api('GET', '/api/questions/pending');
-    if (!r.ok) return;
-    const data = await r.json();
-    if (data.question) {
-      pendingQuestionId = data.question.id;
-      $('bannerQuestionText').textContent = data.question.text;
-      $('bannerAnswer').value = '';
-      $('bannerErr').textContent = '';
-      $('bannerSubmit').disabled = false;
-      $('questionBanner').classList.remove('hidden');
-      // Disable compose bar until answered
-      $('composeRow').style.opacity = '0.5';
-      $('composeRow').style.pointerEvents = 'none';
-      $('sendBtn').disabled = true;
-    } else {
-      pendingQuestionId = null;
-      $('questionBanner').classList.add('hidden');
-      // Re-enable compose bar
-      $('composeRow').style.opacity = '1';
-      $('composeRow').style.pointerEvents = 'auto';
-      $('sendBtn').disabled = false;
-    }
-  } catch(e) {
-    // Silently fail — app works normally
-    $('questionBanner').classList.add('hidden');
-    $('composeRow').style.opacity = '1';
-    $('composeRow').style.pointerEvents = 'auto';
-    $('sendBtn').disabled = false;
-  }
-}
-
-$('bannerSubmit').onclick = async function() {
-  if (answering) return;
-  const answer = $('bannerAnswer').value.trim();
-  if (!answer) { $('bannerErr').textContent = 'Please type an answer.'; return; }
-  answering = true;
-  $('bannerSubmit').disabled = true;
-  try {
-    const r = await api('POST', '/api/questions/' + pendingQuestionId + '/answer', { answer });
-    if (r.ok) {
-      // Success: hide banner, re-enable UI, reload feeds
-      $('questionBanner').classList.add('hidden');
-      pendingQuestionId = null;
-      // Re-enable compose bar
-      $('composeRow').style.opacity = '1';
-      $('composeRow').style.pointerEvents = 'auto';
-      $('sendBtn').disabled = false;
-      updateUI();
-      loadFeed();
-      loadRewards();
-    } else {
-      const j = await r.json();
-      $('bannerErr').textContent = j.error || 'Failed to submit answer.';
-      $('bannerSubmit').disabled = false;
-    }
-  } catch(e) {
-    $('bannerErr').textContent = 'Failed to submit answer.';
-    $('bannerSubmit').disabled = false;
-  } finally {
-    answering = false;
-  }
-};
-
 /* ===== POLLING (live updates, 3s) ===== */
 let pollTimer = null;
 function startPolling() {
@@ -824,25 +673,6 @@ function startPolling() {
         $('statPoints').textContent = me.points || 0;
         $('statRank').textContent = me.rank || '—';
         currentUserId = me.user_id || null;
-      }
-    } catch(e) {}
-    // Check for new admin questions (only if no active pending question)
-    if (!document.getElementById('questionBanner').classList.contains('hidden')) return;
-    try {
-      const r = await api('GET', '/api/questions/pending');
-      if (r.ok) {
-        const data = await r.json();
-        if (data.question) {
-          pendingQuestionId = data.question.id;
-          $('bannerQuestionText').textContent = data.question.text;
-          $('bannerAnswer').value = '';
-          $('bannerErr').textContent = '';
-          $('bannerSubmit').disabled = false;
-          $('questionBanner').classList.remove('hidden');
-          $('composeRow').style.opacity = '0.5';
-          $('composeRow').style.pointerEvents = 'none';
-          $('sendBtn').disabled = true;
-        }
       }
     } catch(e) {}
   }, 3000); // fast poll every 3s
@@ -864,7 +694,6 @@ function startPolling() {
       currentUserId = null;
     }
   updateUI();
-  checkPendingQuestion();
   startPolling();
 })();
 </script>
