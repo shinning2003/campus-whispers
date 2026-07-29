@@ -808,6 +808,7 @@ def create_app(config=None):
     except Exception as exc:  # pragma: no cover - defensive startup guard
         app.logger.error("Campus Whispers: DB init failed at startup: %s", exc)
 
+    app.logger.info("Campus Whispers: app started successfully")
     return app
 
 
@@ -1065,9 +1066,8 @@ def get_db(db_path=None):
                         # no IPv4 pinning needed. The pooled URL already has sslmode & options.
                         _resolved_pg_url = url
                     _db_global = psycopg.connect(
-                        _resolved_pg_url,
+                        f"{_resolved_pg_url}&connect_timeout=5",
                         row_factory=dict_row,
-                        connect_timeout=5,
                     )
                     # Patch close() to no-op — teardown just pops g.db
                     _db_global._orig_close = _db_global.close
@@ -1082,9 +1082,8 @@ def get_db(db_path=None):
                         except Exception:
                             pass
                         _db_global = psycopg.connect(
-                            _resolved_pg_url,
+                            f"{_resolved_pg_url}&connect_timeout=5",
                             row_factory=dict_row,
-                            connect_timeout=5,
                         )
                         _db_global._orig_close = _db_global.close
                         _db_global.close = lambda: None
@@ -1092,7 +1091,7 @@ def get_db(db_path=None):
                 return _db_global
             else:
                 # One-off connection (init_db with custom path)
-                return psycopg.connect(url, row_factory=dict_row, connect_timeout=5)
+                return psycopg.connect(f"{url}&connect_timeout=5", row_factory=dict_row)
 
         except ImportError:
             pass  # no psycopg → SQLite fallback
