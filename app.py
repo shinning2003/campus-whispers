@@ -33,13 +33,10 @@ def create_app(config=None):
 
     @app.teardown_appcontext
     def close_db(exc=None):
-        pool = g.pop("_db_pool", None)
+        g.pop("_db_pool", None)  # legacy, no longer used
         db = g.pop("db", None)
-        if db is not None:
-            if pool is not None and hasattr(db, '_pool_orig_close'):
-                db._pool_orig_close()  # returns conn to pool
-            else:
-                db.close()
+        if db is not None and not getattr(db, "_pool_orig_close", False):
+            db.close()  # SQLite connections need explicit close
 
     @app.post("/api/register")
     def register():
@@ -1039,17 +1036,18 @@ def serve_page(name):
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
 
-
 _db_pool = None
 _resolved_pg_url = None
+_db_global = None  # single persistent connection for sync workers
 
 
 def get_db(db_path=None):
     """Return a connection to whichever DB is configured.
 
-    If DATABASE_URL is set, use psycopg with a persistent connection pool;
-    otherwise fall back to the local SQLite file.
+    If DATABASE_URL is set, use a single persistent psycopg connection
+    (reconnecting on error); otherwise fall back to the local SQLite file.
     """
+
     # Cache connection per request
     if db_path is None and 'db' in g:
         return g.db
@@ -1058,10 +1056,11 @@ def get_db(db_path=None):
         try:
             import psycopg
             from psycopg.rows import dict_row
-            import socket
-            from urllib.parse import urlparse, urlunparse, quote
 
             # Resolve URL to IPv4-pinned string (idempotent)
+            from urllib.parse import urlparse, urlunparse, quote
+            import socket
+
             def resolve(url):
                 parsed = urlparse(url)
                 host = parsed.hostname
@@ -1092,30 +1091,42 @@ def get_db(db_path=None):
                 return url
 
             if db_path is None:
-                # Use a warm connection pool (much faster than per-request connect)
-                global _db_pool, _resolved_pg_url
-                if _db_pool is None:
-                    from psycopg_pool import ConnectionPool
+                global _db_global, _resolved_pg_url
+                if _db_global is None or _db_global.closed:
                     _resolved_pg_url = resolve(url)
-                    _db_pool = ConnectionPool(
-                        conninfo=_resolved_pg_url,
-                        min_size=2,
-                        max_size=5,
-                        max_idle=300,
-                        timeout=10,
-                        open=True,
-                        kwargs={"row_factory": dict_row, "connect_timeout": 10},
+                    _db_global = psycopg.connect(
+                        _resolved_pg_url,
+                        row_factory=dict_row,
+                        connect_timeout=10,
                     )
-                conn = _db_pool.getconn()
-                # Patch close() only once per connection lifetime —
-                # routes call conn.close() on early returns; for pool
-                # connections close() actually returns to pool, so we
-                # make it a no-op and let teardown be the sole return.
-                if not hasattr(conn, '_pool_orig_close'):
-                    conn._pool_orig_close = conn.close
-                    conn.close = lambda: None
+                    conn = _db_global
+                    # Patch close() to be a no-op — tearDown is the sole return
+                    if not hasattr(conn, "_pool_orig_close"):
+                        conn._pool_orig_close = conn.close
+                        conn.close = lambda: None
+                else:
+                    # Verify connection is alive; reconnect if broken
+                    conn = _db_global
+                    try:
+                        conn.cursor().execute("SELECT 1")
+                    except Exception:
+                        try:
+                            conn.close()
+                        except Exception:
+                            pass
+                        _resolved_pg_url = resolve(url)
+                        _db_global = psycopg.connect(
+                            _resolved_pg_url,
+                            row_factory=dict_row,
+                            connect_timeout=10,
+                        )
+                        conn = _db_global
+                        if not hasattr(conn, "_pool_orig_close"):
+                            conn._pool_orig_close = conn.close
+                            conn.close = lambda: None
+                # Close is a no-op — use the connection; teardown does nothing
+                # (the global conn stays open across requests)
                 g.db = conn
-                g._db_pool = _db_pool
                 return conn
             else:
                 # One-off connection (init_db with custom path)
@@ -1124,6 +1135,10 @@ def get_db(db_path=None):
 
         except ImportError:
             pass  # no psycopg → SQLite fallback
+        except Exception as exc:
+            if db_path is None and 'db' not in g:
+                current_app.logger.error("get_db: %s: %s", type(exc).__name__, exc)
+            raise  # Surface other errors instead of corrupting state
     # SQLite (local dev)
     conn = sqlite3.connect(
         current_app.config["DB_PATH"], timeout=30
