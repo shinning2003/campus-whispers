@@ -1107,11 +1107,13 @@ def get_db(db_path=None):
                         kwargs={"row_factory": dict_row, "connect_timeout": 10},
                     )
                 conn = _db_pool.getconn()
-                # Routes call conn.close() on early returns — for pool connections
-                # that returns the conn to the pool AND marks it returned. Make
-                # close a no-op so the teardown handler is the sole return path.
-                conn._pool_orig_close = conn.close
-                conn.close = lambda: None
+                # Patch close() only once per connection lifetime —
+                # routes call conn.close() on early returns; for pool
+                # connections close() actually returns to pool, so we
+                # make it a no-op and let teardown be the sole return.
+                if not hasattr(conn, '_pool_orig_close'):
+                    conn._pool_orig_close = conn.close
+                    conn.close = lambda: None
                 g.db = conn
                 g._db_pool = _db_pool
                 return conn
