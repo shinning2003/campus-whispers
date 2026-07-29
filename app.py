@@ -1081,7 +1081,7 @@ def get_db(db_path=None):
                             url = urlunparse(parsed)
                             if ".neon.tech" in host:
                                 ep_id = host.split(".")[0].replace("-pooler", "")
-                                opt = quote(f"endpoint={ep_id}")
+                                opt = quote(f"endpoint={ep_id} -c statement_timeout=5000")
                                 if "?" in url:
                                     url += "&options=" + opt
                                 else:
