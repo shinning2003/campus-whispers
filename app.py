@@ -33,9 +33,8 @@ def create_app(config=None):
 
     @app.teardown_appcontext
     def close_db(exc=None):
-        g.pop("_db_pool", None)  # legacy, no longer used
         db = g.pop("db", None)
-        if db is not None and not getattr(db, "_pool_orig_close", False):
+        if db is not None and not getattr(db, "_orig_close", False):
             db.close()  # SQLite connections need explicit close
 
     @app.post("/api/register")
@@ -1036,16 +1035,16 @@ def serve_page(name):
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
 
-_db_pool = None
+_db_global = None
+# Cached resolved URL so we don't re-compute on every request
 _resolved_pg_url = None
-_db_global = None  # single persistent connection for sync workers
 
 
 def get_db(db_path=None):
     """Return a connection to whichever DB is configured.
 
-    If DATABASE_URL is set, use a single persistent psycopg connection
-    (reconnecting on error); otherwise fall back to the local SQLite file.
+    If DATABASE_URL is set, keep a single persistent psycopg connection
+    (reconnecting transparently); otherwise fall back to local SQLite.
     """
 
     # Cache connection per request
@@ -1056,92 +1055,60 @@ def get_db(db_path=None):
         try:
             import psycopg
             from psycopg.rows import dict_row
-
-            # Resolve URL to IPv4-pinned string (idempotent)
             from urllib.parse import urlparse, urlunparse, quote
-            import socket
-
-            def resolve(url):
-                parsed = urlparse(url)
-                host = parsed.hostname
-                if host and not _looks_like_ip(host):
-                    try:
-                        ipv4 = socket.gethostbyname(host)
-                        if ipv4 and not ipv4.startswith(":"):
-                            auth = ""
-                            if parsed.username is not None:
-                                auth = parsed.username
-                                if parsed.password is not None:
-                                    auth += ":" + parsed.password
-                            netloc = (auth + "@") if auth else ""
-                            netloc += ipv4
-                            if parsed.port:
-                                netloc += ":" + str(parsed.port)
-                            parsed = parsed._replace(netloc=netloc)
-                            url = urlunparse(parsed)
-                            if ".neon.tech" in host:
-                                ep_id = host.split(".")[0].replace("-pooler", "")
-                                opt = quote(f"endpoint={ep_id} -c statement_timeout=5000")
-                                if "?" in url:
-                                    url += "&options=" + opt
-                                else:
-                                    url += "?options=" + opt
-                    except Exception:
-                        pass
-                return url
 
             if db_path is None:
                 global _db_global, _resolved_pg_url
-                if _db_global is None or _db_global.closed:
-                    _resolved_pg_url = resolve(url)
+                if _db_global is None:
+                    # Build the final URL once for this worker
+                    if _resolved_pg_url is None:
+                        parsed = urlparse(url)
+                        # Add statement_timeout and Neon endpoint to options
+                        host = parsed.hostname
+                        q = parsed.query
+                        if q:
+                            q += "&"
+                        else:
+                            q = ""
+                        q += "options=" + quote("endpoint=" + host.split(".")[0].replace("-pooler", "") + " -c statement_timeout=5000")
+                        parsed = parsed._replace(query=q)
+                        _resolved_pg_url = urlunparse(parsed)
                     _db_global = psycopg.connect(
                         _resolved_pg_url,
                         row_factory=dict_row,
-                        connect_timeout=10,
+                        connect_timeout=5,
                     )
-                    conn = _db_global
-                    # Patch close() to be a no-op — tearDown is the sole return
-                    if not hasattr(conn, "_pool_orig_close"):
-                        conn._pool_orig_close = conn.close
-                        conn.close = lambda: None
+                    # Patch close() to no-op — teardown just pops g.db
+                    _db_global._orig_close = _db_global.close
+                    _db_global.close = lambda: None
                 else:
-                    # Verify connection is alive; reconnect if broken
-                    conn = _db_global
+                    # Quick ping — if it fails, reconnect once
                     try:
-                        conn.cursor().execute("SELECT 1").fetchone()
+                        _db_global.cursor().execute("SELECT 1").fetchone()
                     except Exception:
                         try:
-                            conn.close()
+                            _db_global._orig_close()
                         except Exception:
                             pass
-                        _resolved_pg_url = resolve(url)
                         _db_global = psycopg.connect(
                             _resolved_pg_url,
                             row_factory=dict_row,
-                            connect_timeout=10,
+                            connect_timeout=5,
                         )
-                        conn = _db_global
-                        if not hasattr(conn, "_pool_orig_close"):
-                            conn._pool_orig_close = conn.close
-                            conn.close = lambda: None
-                # Close is a no-op — use the connection; teardown does nothing
-                # (the global conn stays open across requests)
-                g.db = conn
-                return conn
+                        _db_global._orig_close = _db_global.close
+                        _db_global.close = lambda: None
+                g.db = _db_global
+                return _db_global
             else:
                 # One-off connection (init_db with custom path)
-                final = resolve(url)
-                return psycopg.connect(final, row_factory=dict_row, connect_timeout=10)
+                cfg = urlparse(url)
+                return psycopg.connect(cfg, row_factory=dict_row, connect_timeout=5)
 
         except ImportError:
             pass  # no psycopg → SQLite fallback
-        except Exception as exc:
-            if db_path is None and 'db' not in g:
-                current_app.logger.error("get_db: %s: %s", type(exc).__name__, exc)
-            raise  # Surface other errors instead of corrupting state
     # SQLite (local dev)
     conn = sqlite3.connect(
-        current_app.config["DB_PATH"], timeout=30
+        current_app.config["DB_PATH"], timeout=5
     )
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
