@@ -8,6 +8,7 @@ next-day drop unless a grace/freeze mechanism lets recovery). We implement a
 import pytest
 from datetime import datetime, timezone, timedelta
 from tests.helpers import register_and_login
+from flask import g
 from app import create_app, get_db, init_db
 
 
@@ -48,6 +49,7 @@ def test_consecutive_days_increment(client, tmp_path):
     with app.app_context():
         conn = get_db(); conn.execute("DROP TABLE IF EXISTS rumors")
         conn.execute("DROP TABLE IF EXISTS users"); conn.commit(); conn.close()
+        g.pop("db", None)
         init_db()
     c = app.test_client()
     register_and_login(c, handle="streak1", email="s@x.com")
@@ -62,6 +64,7 @@ def test_missing_day_but_grace_keeps_streak(client, tmp_path):
     with app.app_context():
         conn = get_db(); conn.execute("DROP TABLE IF EXISTS rumors")
         conn.execute("DROP TABLE IF EXISTS users"); conn.commit(); conn.close()
+        g.pop("db", None)
         init_db()
     c = app.test_client()
     register_and_login(c, handle="streak1", email="s@x.com")
@@ -78,6 +81,7 @@ def test_gap_beyond_grace_resets_streak(client, tmp_path):
     with app.app_context():
         conn = get_db(); conn.execute("DROP TABLE IF EXISTS rumors")
         conn.execute("DROP TABLE IF EXISTS users"); conn.commit(); conn.close()
+        g.pop("db", None)
         init_db()
     c = app.test_client()
     register_and_login(c, handle="streak1", email="s@x.com")

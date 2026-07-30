@@ -1,6 +1,7 @@
 """Shared pytest fixtures for Campus Whispers tests."""
 import pytest
 from app import create_app, init_db, get_db
+from flask import g
 
 
 @pytest.fixture
@@ -24,6 +25,7 @@ def client(tmp_path):
         conn.execute("DROP TABLE IF EXISTS users")
         conn.commit()
         conn.close()
+        g.pop("db", None)  # Clear cached connection so init_db() gets a fresh one
         init_db()
     with app.test_client() as client:
         yield client

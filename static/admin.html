@@ -82,18 +82,9 @@
       <div class="tabs">
         <button id="tabRumors" class="active">Rumors</button>
         <button id="tabUsers">Users</button>
-        <button id="tabQuestions">Questions</button>
       </div>
       <div id="list"></div>
       <div id="userList" class="hidden"></div>
-      <div id="questionList" class="hidden">
-        <div class="create-area">
-          <textarea id="questionInput" placeholder="Type a question for users..." maxlength="500"></textarea>
-          <button id="createQuestion">Send Question</button>
-          <div class="msg" id="questionMsg"></div>
-        </div>
-        <div id="questionsContainer"></div>
-      </div>
       <a href="/">← Back to board</a>
     </div>
   </main>
@@ -106,21 +97,17 @@
 
     $('login').onclick = async () => {
       const r = await api('POST','/api/admin/login',{password:$('pw').value});
-      if (r.ok){ $('loginCard').classList.add('hidden'); $('dashCard').classList.remove('hidden'); loadRumors(); loadUsers(); loadQuestions(); }
+      if (r.ok){ $('loginCard').classList.add('hidden'); $('dashCard').classList.remove('hidden'); loadRumors(); loadUsers(); }
       else { $('loginMsg').textContent = 'Wrong password.'; }
     };
 
     $('tabRumors').onclick = () => {
-      $('tabRumors').classList.add('active'); $('tabUsers').classList.remove('active'); $('tabQuestions').classList.remove('active');
-      $('list').classList.remove('hidden'); $('userList').classList.add('hidden'); $('questionList').classList.add('hidden');
+      $('tabRumors').classList.add('active'); $('tabUsers').classList.remove('active');
+      $('list').classList.remove('hidden'); $('userList').classList.add('hidden');
     };
     $('tabUsers').onclick = () => {
-      $('tabUsers').classList.add('active'); $('tabRumors').classList.remove('active'); $('tabQuestions').classList.remove('active');
-      $('userList').classList.remove('hidden'); $('list').classList.add('hidden'); $('questionList').classList.add('hidden');
-    };
-    $('tabQuestions').onclick = () => {
-      $('tabQuestions').classList.add('active'); $('tabRumors').classList.remove('active'); $('tabUsers').classList.remove('active');
-      $('questionList').classList.remove('hidden'); $('list').classList.add('hidden'); $('userList').classList.add('hidden');
+      $('tabUsers').classList.add('active'); $('tabRumors').classList.remove('active');
+      $('userList').classList.remove('hidden'); $('list').classList.add('hidden');
     };
 
     async function loadRumors() {
@@ -170,53 +157,6 @@
       }
     }
 
-    /* ===== Questions ===== */
-    $('createQuestion').onclick = async () => {
-      const text = $('questionInput').value.trim();
-      if (!text) { $('questionMsg').textContent = 'Enter a question.'; return; }
-      $('questionMsg').textContent = '';
-      const r = await api('POST', '/api/admin/questions', { text });
-      if (r.ok) {
-        $('questionInput').value = '';
-        loadQuestions();
-      } else {
-        const e = await r.json();
-        $('questionMsg').textContent = e.error || 'Failed to create question.';
-      }
-    };
-
-    async function loadQuestions() {
-      const r = await api('GET', '/api/admin/questions');
-      const data = await r.json();
-      const el = $('questionsContainer');
-      el.innerHTML = '';
-      if (!data.questions || !data.questions.length) {
-        el.innerHTML = '<p class="msg">No questions sent yet.</p>';
-        return;
-      }
-      for (const q of data.questions) {
-        const d = document.createElement('div'); d.className = 'item';
-        const statusBadge = q.active
-          ? '<span class="active-badge">Active</span>'
-          : '<span class="inactive-badge">Inactive</span>';
-        d.innerHTML = `<div class="body">
-          <div>${esc(q.question_text)} ${statusBadge}</div>
-          <div class="meta">
-            <span class="id">#${q.id}</span> ·
-            ${new Date(q.created_at).toLocaleString()} ·
-            <span class="handle">${q.answer_count} answer${q.answer_count !== 1 ? 's' : ''}</span>
-          </div></div>`;
-        const del = document.createElement('button'); del.className = 'del'; del.textContent = 'Delete';
-        del.onclick = async () => {
-          if (confirm('Delete this question and all its answers?')) {
-            await api('DELETE', '/api/admin/questions/' + q.id);
-            loadQuestions();
-          }
-        };
-        d.appendChild(del);
-        el.appendChild(d);
-      }
-    }
   </script>
 </body>
 </html>

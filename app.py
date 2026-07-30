@@ -192,6 +192,12 @@ def create_app(config=None):
             params = (session["user_id"],)
         order_clause = "ORDER BY r.created_at DESC, r.id DESC"
         if sort == "hot":
+            # Hot: highlighted posts first, then recently bumped, then newest
+            order_clause = ("ORDER BY r.highlighted DESC, "
+                            "r.bumped_at DESC NULLS LAST, "
+                            "r.created_at DESC, r.id DESC")
+        elif sort == "rising":
+            # Rising: newest first (no reactions data to compute a rising score)
             order_clause = "ORDER BY r.created_at DESC, r.id DESC"
         rows = exec(conn, base + " " + order_clause, params).fetchall()
         out = [rumor_public(r, conn) for r in rows]
@@ -332,8 +338,6 @@ def create_app(config=None):
     @app.get("/api/leaderboard")
     def leaderboard():
         conn = get_db()
-        ids = [r[0] if not hasattr(r, "keys") else r["id"]
-               for r in exec(conn, "SELECT id FROM users WHERE banned=0", ()).fetchall()]
         now_iso = datetime.now(timezone.utc).isoformat()
         featured_users = set()
         for r in exec(conn,
@@ -341,12 +345,17 @@ def create_app(config=None):
             "AND (expires_at IS NULL OR expires_at > ?)", (now_iso,)
         ).fetchall():
             featured_users.add(r[0] if not hasattr(r, "keys") else r["user_id"])
-        scored = sorted(((uid, _compute_points(conn, uid)) for uid in ids),
-                        key=lambda t: t[1], reverse=True)
+        # Use the cached points column instead of recomputing for every user
+        scored_rows = exec(conn,
+            "SELECT id, points FROM users WHERE banned=0 "
+            "ORDER BY points DESC, id"
+        ).fetchall()
         conn.close()
         # Anonymized: alias only (Player #N), never the handle/email/real_name.
         out = []
-        for i, (uid, pts) in enumerate(scored[:10], start=1):
+        for i, row in enumerate(scored_rows[:10], start=1):
+            uid = row[0] if not hasattr(row, "keys") else row["id"]
+            pts = row[1] if not hasattr(row, "keys") else row["points"]
             entry = {"rank": i, "alias": f"Player #{i}", "points": pts}
             if uid in featured_users:
                 entry["featured"] = True
@@ -1420,6 +1429,7 @@ CHALLENGE_DEFS = [
 
 # Shop: item key -> (label, description, price).
 SHOP_ITEMS = {
+    "alias": ("✏️ Custom Alias", "Set a custom display name on your whispers (max 30 chars)", 80),
     "highlight": ("✨ Highlight Whisper", "Add a glowing border to one of your whispers", 50),
     "bump": ("⏫ Bump Whisper", "Push one of your whispers back to the top of the feed", 30),
     "featured": ("👑 Featured Spot", "Featured badge on your profile for 1 week", 200),
@@ -1481,9 +1491,13 @@ def _compute_points(conn, user_id):
               metoo_recv * PTS_METOO_RECEIVED + claim_pts)
     # admin-awarded bonus points
     row_aw = exec(conn, "SELECT points_awarded FROM users WHERE id=?", (user_id,)).fetchone()
+    if row_aw is None:
+        return 0
     awarded = row_aw[0] if not hasattr(row_aw, "keys") else row_aw["points_awarded"]
     # subtract points spent in the shop
     row = exec(conn, "SELECT points_spent FROM users WHERE id=?", (user_id,)).fetchone()
+    if row is None:
+        return 0
     spent = row[0] if not hasattr(row, "keys") else row["points_spent"]
     total = max(earned + awarded - spent, 0)
     exec(conn, "UPDATE users SET points=? WHERE id=?", (total, user_id))

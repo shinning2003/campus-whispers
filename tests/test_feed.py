@@ -68,6 +68,7 @@ def test_bump_updates_feed_order(client):
 
 def test_shop_catalog_omits_custom_alias_and_includes_featured(client):
     shop = client.get("/api/shop").get_json()["items"]
-    assert "alias" not in shop
+    # alias is now a purchasable item
+    assert shop["alias"]["label"] == "✏️ Custom Alias"
     assert shop["featured"]["label"] == "👑 Featured Spot"
     assert "highlight" in shop and "bump" in shop and "incognito" in shop
