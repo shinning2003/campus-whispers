@@ -6,8 +6,10 @@ identity behind a handle, and can ban/delete anyone who misbehaves.
 """
 import os
 import re
+import socket
 import sqlite3
 from datetime import datetime, timezone, timedelta
+from urllib.parse import urlparse, urlunparse
 
 from flask import Flask, jsonify, request, session, current_app, g
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -1054,6 +1056,30 @@ _db_global = None
 _resolved_pg_url = None
 
 
+def _resolve_pg_url(url):
+    """Resolve Postgres hostname to IPv4 for Render compatibility.
+
+    Supabase `db.<ref>.supabase.co` returns AAAA (IPv6) records that Render
+    cannot route to. Pre-resolve to IPv4 and embed the literal IP,
+    then ensure sslmode=require so TLS works with the IP address.
+    """
+    parsed = urlparse(url)
+    host = parsed.hostname
+    if host:
+        try:
+            ip = socket.gethostbyname(host)  # IPv4-only — works on Render DNS
+            if ip != host:
+                netloc = parsed.netloc.replace(host, ip, 1)
+                url = urlunparse(parsed._replace(netloc=netloc))
+        except OSError:
+            pass  # fall back to hostname; may fail on Render but try
+    # Ensure sslmode=require for TLS over IP address
+    if "sslmode" not in url:
+        sep = "&" if "?" in url else "?"
+        url = f"{url}{sep}sslmode=require"
+    return url
+
+
 def get_db(db_path=None):
     """Return a connection to whichever DB is configured.
 
@@ -1075,9 +1101,8 @@ def get_db(db_path=None):
                 if _db_global is None:
                     # Build the final URL once for this worker
                     if _resolved_pg_url is None:
-                        # Use DATABASE_URL as-is — psycopg3 on Python 3.14+ handles SNI natively,
-                        # no IPv4 pinning needed. The pooled URL already has sslmode & options.
-                        _resolved_pg_url = url
+                        # Resolve IPv4 for Render (Supabase host is IPv6-only)
+                        _resolved_pg_url = _resolve_pg_url(url)
                     _db_global = psycopg.connect(
                         f"{_resolved_pg_url}&connect_timeout=5",
                         row_factory=dict_row,

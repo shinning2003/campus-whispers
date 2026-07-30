@@ -6,6 +6,7 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:create_app() --bind 0.0.0.0:$PORT
     healthCheckPath: /api/me
+    autoDeploy: yes
     envVars:
       - key: DATABASE_URL
         sync: false
@@ -14,7 +15,7 @@ services:
       - key: ADMIN_EMAIL
         sync: false
       - key: SECRET_KEY
-        generateValue: true
+        sync: false
     disk:
       mountLocation: /data
       sizeGB: 1
