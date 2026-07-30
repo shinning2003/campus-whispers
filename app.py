@@ -248,6 +248,10 @@ def create_app(config=None):
         uid = session["user_id"]
         row = exec(conn, "SELECT handle, selected_badge FROM users WHERE id=?",
                    (uid,)).fetchone()
+        if row is None:
+            session.clear()
+            conn.close()
+            return jsonify({"error": "User not found."}), 404
         streak, at_risk = _compute_streak(conn, uid)
         points = _compute_points(conn, uid)
         badges = _compute_badges(conn, uid)
