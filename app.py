@@ -784,26 +784,6 @@ def create_app(config=None):
     def index():
         return serve_page("index.html")
 
-    @app.get("/api/_dbg")
-    def dbg():
-        import socket as sck
-        url = current_app.config.get("DATABASE_URL", "")
-        from urllib.parse import urlparse
-        parsed = urlparse(url)
-        host = parsed.hostname or ""
-        ip = ""
-        try:
-            ip = sck.gethostbyname(host)
-        except Exception as e:
-            ip = f"ERR:{e}"
-        return jsonify({
-            "db_url_set": bool(url),
-            "db_url_host": host,
-            "db_url_resolved_ip": ip,
-            "resolved_pg_url": _resolved_pg_url or None,
-            "db_global_ok": _db_global is not None and not _db_global.closed,
-        })
-
     @app.get("/admin")
     def admin_page():
         return serve_page("admin.html")
